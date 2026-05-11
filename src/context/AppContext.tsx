@@ -92,6 +92,36 @@ const DEFAULT_SCORE_SYNC_STATUS: ScoreSyncStatus = {
   lastError: null,
 };
 
+const SCORE_SYNC_MAX_CALLS_PER_MINUTE = 10;
+const SCORE_SYNC_MIN_GAP_MS = Math.ceil((60_000 / SCORE_SYNC_MAX_CALLS_PER_MINUTE) * 1.1);
+const SCORE_SYNC_JITTER_MS = 2_000;
+const SCORE_SYNC_LAST_REQUEST_KEY = 'scoreSync:lastRequestAt';
+
+const getScoreSyncCooldownRemainingMs = (nowMs: number = Date.now()): number => {
+  try {
+    const lastRequestRaw = localStorage.getItem(SCORE_SYNC_LAST_REQUEST_KEY);
+    if (!lastRequestRaw) return 0;
+
+    const lastRequestMs = Number.parseInt(lastRequestRaw, 10);
+    if (Number.isNaN(lastRequestMs) || lastRequestMs <= 0) return 0;
+
+    const elapsed = nowMs - lastRequestMs;
+    if (elapsed >= SCORE_SYNC_MIN_GAP_MS) return 0;
+
+    return SCORE_SYNC_MIN_GAP_MS - elapsed;
+  } catch {
+    return 0;
+  }
+};
+
+const markScoreSyncRequest = (nowMs: number = Date.now()): void => {
+  try {
+    localStorage.setItem(SCORE_SYNC_LAST_REQUEST_KEY, `${nowMs}`);
+  } catch {
+    // Ignore storage failures; sync can still continue.
+  }
+};
+
 const AppContext = createContext<AppState | undefined>(undefined);
 
 const mergeMatchesWithTemplate = (id: TournamentId, savedMatches?: Match[]): Match[] => {
@@ -368,6 +398,16 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
       }
     };
 
+    const scheduleSyncAfter = (delayMs: number) => {
+      const safeDelayMs = Math.max(0, delayMs);
+      const jitterMs = Math.floor(Math.random() * SCORE_SYNC_JITTER_MS);
+
+      clearSyncTimer();
+      scoreSyncTimerRef.current = window.setTimeout(() => {
+        void runSyncCycle();
+      }, safeDelayMs + jitterMs);
+    };
+
     if (!isLoaded) {
       clearSyncTimer();
       return;
@@ -390,10 +430,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
       if (isCancelled) return;
 
       const delayMs = getNextScoreSyncDelayMs(latestSyncInputsRef.current.matches);
-      clearSyncTimer();
-      scoreSyncTimerRef.current = window.setTimeout(() => {
-        void runSyncCycle();
-      }, delayMs);
+      scheduleSyncAfter(delayMs);
     };
 
     const runSyncCycle = async () => {
@@ -402,7 +439,20 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
         return;
       }
 
+      const nowMs = Date.now();
+      const remainingCooldownMs = getScoreSyncCooldownRemainingMs(nowMs);
+      if (remainingCooldownMs > 0) {
+        setScoreSyncStatus((prev) => ({
+          ...prev,
+          state: 'idle',
+          lastError: null,
+        }));
+        scheduleSyncAfter(remainingCooldownMs);
+        return;
+      }
+
       scoreSyncInFlightRef.current = true;
+      markScoreSyncRequest(nowMs);
 
       setScoreSyncStatus((prev) => ({
         ...prev,

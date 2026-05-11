@@ -87,6 +87,7 @@ Notes:
 - A single fetch cycle covers all users in a live game because only the Host writes updates.
 - Local development uses the built-in Vite proxy path (`/api/football-data`) by default to bypass browser CORS restrictions.
 - After changing `.env` or proxy settings, restart `npm run dev`.
+- The client enforces a minimum delay between API calls (~6.6s) with jitter to stay within the free-tier 10 calls/minute ceiling per browser session.
 
 ### Testing Before Fixtures Are Played
 
