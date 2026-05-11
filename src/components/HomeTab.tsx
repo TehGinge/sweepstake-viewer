@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
+import { Star } from 'lucide-react';
 import { generateLeaderboard, calculateTeamPoints, getGroupStandings } from '../utils/scoring';
 import { CONTROLS, SURFACES, TEXT, getPlayerTheme } from '../utils/theme';
 
@@ -9,6 +10,15 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
   const { players, matches, config, teams, isReadOnly } = useAppContext();
   const [viewMode, setViewMode] = useState<'PLAYERS' | 'TEAMS'>('PLAYERS');
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'fifaRanking', direction: 'asc' });
+
+  const topDrawTeamIds = useMemo(() => {
+    return new Set(
+      [...teams]
+        .sort((a, b) => a.fifaRanking - b.fifaRanking)
+        .slice(0, 16)
+        .map(team => team.id)
+    );
+  }, [teams]);
 
   const { groupStandingsMap, teamProgressionMap, eliminatedMap } = useMemo(() => {
     const gMap = new Map<string, number>();
@@ -223,6 +233,7 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
                    const pos = groupStandingsMap.get(team.id);
                    const eliminated = eliminatedMap.get(team.id);
                    const progression = teamProgressionMap.get(team.id);
+                   const isTopDraw = topDrawTeamIds.has(team.id);
                    
                    if (progression === 'Winner') {
                       cardBorderClass = 'border-emerald-400 dark:border-emerald-500 ring-2 ring-emerald-400 dark:ring-emerald-500 shadow-md';
@@ -243,13 +254,20 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
                        type="button"
                        onClick={() => onTeamClick(team.id)}
                        className={`w-full flex items-center justify-between p-2 border rounded-lg transition-colors bg-white dark:bg-slate-950 text-left ${cardBorderClass}`}
-                       title={`Open ${team.name} in FotMob`}
+                      title={`Open ${team.name} in FotMob`}
                      >
                        <div className="flex items-center gap-2 flex-1 min-w-0">
                          <img src={`https://flagcdn.com/w40/${team.iso2}.png`} alt={team.name} className="w-6 h-4 object-cover rounded shadow-[0_0_0_1px_rgba(0,0,0,0.1)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.1)] shrink-0" title={team.name} />
                          <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
                            <span className="font-bold text-slate-800 dark:text-slate-200 text-xs block truncate" title={team.name}>{team.name}</span>
-                           <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">Grp {team.group}{progression && progression !== 'Winner' ? ` • ${progression}` : ''}{progression === 'Winner' ? ' • Winner' : ''}</span>
+                           <div className="flex flex-wrap items-center gap-1.5">
+                             <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">Grp {team.group}{progression && progression !== 'Winner' ? ` • ${progression}` : ''}{progression === 'Winner' ? ' • Winner' : ''}</span>
+                             {isTopDraw && (
+                               <span className="inline-flex items-center justify-center rounded border border-amber-300 bg-amber-100 p-0.5 text-amber-800 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-300" title="Top draw team" aria-label="Top draw team">
+                                 <Star size={10} className="fill-current" />
+                               </span>
+                             )}
+                           </div>
                          </div>
                        </div>
                        <div className={`px-2 py-1 flex-col justify-center items-center rounded text-center shrink-0 min-w-[2.5rem] ml-2 border flex ${theme.lightBg} ${theme.border}`}>
