@@ -354,15 +354,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
     }
   }, [matchesState, teams, isLoaded]);
 
-  useEffect(() => {
-    if (!isLoaded) return;
-
-    if (settings.isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [settings.isDarkMode, isLoaded]);
+  // the local dark mode effect is now managed in App.tsx
 
   useEffect(() => {
     if (isLoaded && !computedReadOnly && !cloudGameId) {

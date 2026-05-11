@@ -26,6 +26,12 @@ function MainApp() {
   const [activeTab, setActiveTab] = useState<TabType>('HOME');
   const [targetGroup, setTargetGroup] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const stored = localStorage.getItem('theme-dark');
+    if (stored !== null) return stored === 'true';
+    return true; // Default to true
+  });
+  
   const {
     tournamentId,
     setTournamentId,
@@ -45,6 +51,15 @@ function MainApp() {
       setActiveTab('HOME');
     }
   }, [isReadOnly, activeTab]);
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('theme-dark', String(isDarkMode));
+  }, [isDarkMode]);
 
   // Get the display year based on tournamentId
   const getTournamentYear = () => {
@@ -130,13 +145,21 @@ function MainApp() {
             <span className="text-slate-900 dark:text-white drop-shadow-sm">{getTournamentName()}</span>
             <span className="text-emerald-600 dark:text-emerald-400 drop-shadow-sm">{settings.customTitle !== undefined ? settings.customTitle : 'SWEEPSTAKE'}</span>
             {isReadOnly && (
-              <span className="ml-auto md:ml-2 text-[10px] uppercase tracking-widest font-black px-2 py-1 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
-                Live Viewer
+              <span className="ml-auto md:ml-2 text-[10px] uppercase tracking-widest font-black px-2 py-1 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300 dark:border-amber-700 flex items-center gap-1.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                </span>
+                Live
               </span>
             )}
             {!isReadOnly && cloudGameId && (
-              <span className="ml-auto md:ml-2 text-[10px] uppercase tracking-widest font-black px-2 py-1 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
-                Live Host
+              <span className="ml-auto md:ml-2 text-[10px] uppercase tracking-widest font-black px-2 py-1 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 flex items-center gap-1.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                Live
               </span>
             )}
             {!isReadOnly && (
@@ -146,17 +169,15 @@ function MainApp() {
                 className={`ml-auto md:ml-2 text-xs font-bold rounded px-2 py-1 ${CONTROLS.input}`}
               >
                 <option value="WC26">World Cup 2026</option>
-                <option value="EURO28">Euro 2028 (Test)</option>
+                <option value="EURO28">Euro 2028</option>
               </select>
             )}
-            {!isReadOnly && (
-              <button
-                onClick={() => setShowSettings(true)}
-                className="p-1.5 rounded-lg transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              >
-                <Settings size={18} />
-              </button>
-            )}
+            <button
+              onClick={() => setShowSettings(true)}
+              className="ml-auto md:ml-2 p-1.5 rounded-lg transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+            >
+              <Settings size={18} />
+            </button>
           </h1>
         </div>
         <div className="w-full md:w-auto">
@@ -191,7 +212,7 @@ function MainApp() {
         {activeTab === 'MATCHES' && <MatchesTab />}
       </main>
 
-      {!isReadOnly && showSettings && (
+      {showSettings && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className={`${SURFACES.card} rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col`}>
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
@@ -204,47 +225,51 @@ function MainApp() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className={`font-bold ${TEXT.secondary}`}>Dark Mode</h3>
-                  <p className={`text-xs ${TEXT.muted}`}>Toggle dark theme</p>
+                  <p className={`text-xs ${TEXT.muted}`}>Toggle dark theme (local)</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" checked={settings.isDarkMode ?? false} onChange={(e) => updateSettings({ isDarkMode: e.target.checked })} />
+                  <input type="checkbox" className="sr-only peer" checked={isDarkMode} onChange={(e) => setIsDarkMode(e.target.checked)} />
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-500"></div>
                 </label>
               </div>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className={`font-bold ${TEXT.secondary}`}>Randomize All</h3>
-                  <p className={`text-xs ${TEXT.muted}`}>Show randomize button in Setup</p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" checked={settings.allowRandomize ?? false} onChange={(e) => updateSettings({ allowRandomize: e.target.checked })} />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-500"></div>
-                </label>
-              </div>
+              {!isReadOnly && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className={`font-bold ${TEXT.secondary}`}>Randomize All</h3>
+                      <p className={`text-xs ${TEXT.muted}`}>Show randomize button in Setup</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" checked={settings.allowRandomize ?? false} onChange={(e) => updateSettings({ allowRandomize: e.target.checked })} />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-500"></div>
+                    </label>
+                  </div>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className={`font-bold ${TEXT.secondary}`}>Simulate Matches</h3>
-                  <p className={`text-xs ${TEXT.muted}`}>Show simulation controls</p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" checked={settings.allowSimulate ?? false} onChange={(e) => updateSettings({ allowSimulate: e.target.checked })} />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-500"></div>
-                </label>
-              </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className={`font-bold ${TEXT.secondary}`}>Simulate Matches</h3>
+                      <p className={`text-xs ${TEXT.muted}`}>Show simulation controls</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" checked={settings.allowSimulate ?? false} onChange={(e) => updateSettings({ allowSimulate: e.target.checked })} />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-500"></div>
+                    </label>
+                  </div>
 
-              <div>
-                <h3 className={`font-bold mb-1 ${TEXT.secondary}`}>Custom Title</h3>
-                <p className={`text-xs mb-2 ${TEXT.muted}`}>Override the default "SWEEPSTAKE" text</p>
-                <input
-                  type="text"
-                  value={settings.customTitle !== undefined ? settings.customTitle : 'SWEEPSTAKE'}
-                  onChange={(e) => updateSettings({ customTitle: e.target.value })}
-                  placeholder="e.g. OFFICE LEAGUE"
-                  className={`w-full rounded-lg px-3 py-2 text-sm font-bold ${CONTROLS.input}`}
-                />
-              </div>
+                  <div>
+                    <h3 className={`font-bold mb-1 ${TEXT.secondary}`}>Custom Title</h3>
+                    <p className={`text-xs mb-2 ${TEXT.muted}`}>Override the default "SWEEPSTAKE" text</p>
+                    <input
+                      type="text"
+                      value={settings.customTitle !== undefined ? settings.customTitle : 'SWEEPSTAKE'}
+                      onChange={(e) => updateSettings({ customTitle: e.target.value })}
+                      placeholder="e.g. OFFICE LEAGUE"
+                      className={`w-full rounded-lg px-3 py-2 text-sm font-bold ${CONTROLS.input}`}
+                    />
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -254,7 +279,7 @@ function MainApp() {
         <div className="max-w-6xl mx-auto px-4 flex flex-col items-center gap-4">
           <div className="text-center text-sm font-medium">
             {cloudGameId
-              ? (isCloudOwner ? 'Live Firebase game: your edits are synced to all viewers.' : 'Live Firebase game: viewing updates in real time.')
+              ? (isCloudOwner ? 'Live game: your edits are synced to all viewers.' : 'Live game: viewing updates in real time.')
               : 'Assign teams, enter scores, and battle for the sweepstake crown!'}
           </div>
 
