@@ -151,10 +151,18 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
     );
   }
 
-  const upcomingMatches = matches
+  const recentMatches = matches
+    .filter(m => m.status === 'FINISHED' && m.date)
+    .sort((a, b) => new Date(b.date!).getTime() - new Date(a.date!).getTime())
+    .slice(0, 2)
+    .reverse();
+
+  const upMatches = matches
     .filter(m => m.status === 'SCHEDULED' && m.date)
     .sort((a, b) => new Date(a.date!).getTime() - new Date(b.date!).getTime())
     .slice(0, 4);
+
+  const displayMatches = [...recentMatches, ...upMatches];
 
   const getMatchNumber = (matchId: string, fallback: number) => {
     const trailingDigits = matchId.match(/(\d+)(?!.*\d)/);
@@ -359,13 +367,13 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
       {/* Upcoming Matches Sidebar */}
       <div className="w-full xl:w-96 flex-shrink-0 space-y-4">
         <h3 className="font-black text-slate-800 dark:text-slate-100 text-lg px-1 flex items-center gap-2">
-          📅 Upcoming Matches
+          📅 Recent & Upcoming Matches
         </h3>
-        {upcomingMatches.length === 0 ? (
-          <p className="text-slate-600 dark:text-slate-400 text-sm italic px-1">No upcoming matches.</p>
+        {displayMatches.length === 0 ? (
+          <p className="text-slate-600 dark:text-slate-400 text-sm italic px-1">No matches.</p>
         ) : (
           <div className="space-y-3">
-             {upcomingMatches.map((match, index) => {
+             {displayMatches.map((match, index) => {
                 const homeTeam = teams.find(t => t.id === match.homeTeamId);
                 const awayTeam = teams.find(t => t.id === match.awayTeamId);
                const matchNumber = getMatchNumber(match.id, index + 1);
@@ -382,9 +390,9 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
                     }}
                     className="w-full text-left bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 hover:shadow-md transition-all cursor-pointer"
                   >
-                    <div className="text-[10px] uppercase font-bold text-slate-700 dark:text-slate-300 mb-3 flex justify-between items-center bg-slate-100 dark:bg-slate-900 px-2 py-1.5 rounded-md border border-slate-200 dark:border-slate-700">
+                    <div className={`text-[10px] uppercase font-bold mb-3 flex justify-between items-center px-2 py-1.5 rounded-md border ${match.status === 'FINISHED' ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}`}>
                       <span className="truncate pr-2">{`Match ${matchNumber} • ${match.stage === 'GROUP' ? `Group ${match.group}` : match.stage}`}</span>
-                      <span className="shrink-0 text-emerald-700 dark:text-emerald-400">
+                      <span className="shrink-0 font-medium">
                         {match.date ? new Date(match.date).toLocaleString('en-GB', { timeZone: 'Europe/London', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' BST' : 'TBD'}
                       </span>
                     </div>
@@ -417,6 +425,11 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
                              <span className="font-bold text-slate-500 dark:text-slate-400 text-base italic">{match.placeholderHome || 'TBD'}</span>
                           )}
                         </div>
+                        {match.homeScore !== null && (
+                          <div className={`text-lg font-black px-2 ${match.homeScore > (match.awayScore ?? 0) ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
+                            {match.homeScore}
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-between">
@@ -446,6 +459,11 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
                              <span className="font-bold text-slate-500 dark:text-slate-400 text-base italic">{match.placeholderAway || 'TBD'}</span>
                           )}
                         </div>
+                        {match.awayScore !== null && (
+                          <div className={`text-lg font-black px-2 ${match.awayScore > (match.homeScore ?? 0) ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
+                            {match.awayScore}
+                          </div>
+                        )}
                       </div>
                     </div>
                     {match.location && (
