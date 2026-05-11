@@ -4,7 +4,7 @@ import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(({mode}) => {
-  const base = mode === 'production' ? '/Sweepstake-Viewer/' : '/';
+  const base = mode === 'production' ? '/sweepstake-viewer/' : '/';
 
   return {
     base,
