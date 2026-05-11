@@ -106,7 +106,7 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
         assigneeIndex,
         points,
         played,
-        stage: played > 0 ? (teamProgressionMap.get(team.id) || (eliminatedMap.get(team.id) ? 'Eliminated' : '-')) : '-'
+        stage: played > 0 ? (teamProgressionMap.get(team.id) || (eliminatedMap.get(team.id) && played >= 3 ? 'Eliminated' : '-')) : '-'
       };
     });
   }, [players, matches, config, teams, teamProgressionMap, eliminatedMap]);
@@ -217,7 +217,8 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
               <div className="flex-1 p-3 grid gap-1.5 bg-slate-50/70 dark:bg-slate-900">
                 {[...entry.teams].sort((a, b) => a.fifaRanking - b.fifaRanking).map(team => {
                    const pts = calculateTeamPoints(team.id, matches, config);
-                   const hasPlayed = matches.some(m => (m.homeTeamId === team.id || m.awayTeamId === team.id) && m.status === 'FINISHED');
+                   const playedCount = matches.filter(m => (m.homeTeamId === team.id || m.awayTeamId === team.id) && m.status === 'FINISHED').length;
+                   const hasPlayed = playedCount > 0;
                    let cardBorderClass = 'border-slate-100 dark:border-slate-700/50 hover:border-slate-200 dark:hover:border-slate-600 shadow-sm';
                    const pos = groupStandingsMap.get(team.id);
                    const eliminated = eliminatedMap.get(team.id);
@@ -232,7 +233,7 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
                    } else if (pos === 3) {
                       cardBorderClass = 'border-orange-400 dark:border-orange-500 ring-1 ring-orange-400 dark:ring-orange-500 shadow-sm';
                    }
-                   if (eliminated) {
+                   if (eliminated && playedCount >= 3) {
                       cardBorderClass += ' opacity-40 grayscale';
                    }
 
@@ -313,7 +314,7 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
                 {sortedTeams.map((team) => {
                   const theme = getPlayerTheme(team.assigneeIndex);
                   return (
-                  <tr key={team.id} className={`hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors ${eliminatedMap.get(team.id) ? 'opacity-40 grayscale' : ''}`}>
+                  <tr key={team.id} className={`hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors ${eliminatedMap.get(team.id) && team.played >= 3 ? 'opacity-40 grayscale' : ''}`}>
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <img src={`https://flagcdn.com/w40/${team.iso2}.png`} alt={team.name} className="w-6 h-4 object-cover rounded shadow-[0_0_0_1px_rgba(0,0,0,0.1)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.1)]" title={team.name} />

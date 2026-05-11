@@ -16,6 +16,20 @@ export const GroupsTab: React.FC<{ initialGroup?: string | null; onGroupHandled?
 
   const standings = getGroupStandings(activeGroup, matches, teams);
 
+  const simulateActiveGroup = () => {
+    setMatches(prev => prev.map(match => {
+      if (match.stage === 'GROUP' && match.group === activeGroup && match.homeTeamId && match.awayTeamId && match.homeScore === null) {
+        return {
+          ...match,
+          homeScore: Math.floor(Math.random() * 4),
+          awayScore: Math.floor(Math.random() * 4),
+          status: 'FINISHED'
+        };
+      }
+      return match;
+    }));
+  };
+
   const simulateGroupMatches = () => {
     setMatches(prev => prev.map(match => {
       if (match.stage === 'GROUP' && match.homeTeamId && match.awayTeamId && match.homeScore === null) {
@@ -63,12 +77,20 @@ export const GroupsTab: React.FC<{ initialGroup?: string | null; onGroupHandled?
               <span className={`inline-flex items-center px-2.5 py-1 rounded text-sm font-semibold border bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600`}>Group {activeGroup}</span>
             </div>
             {settings.allowSimulate && !isReadOnly && (
-              <button
-                onClick={simulateGroupMatches}
-                className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors"
-              >
-                Simulate All Groups
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={simulateActiveGroup}
+                  className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors"
+                >
+                  Simulate Group {activeGroup}
+                </button>
+                <button
+                  onClick={simulateGroupMatches}
+                  className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors"
+                >
+                  Simulate All Groups
+                </button>
+              </div>
             )}
           </div>
           <div className="overflow-x-auto hide-scrollbar px-6 pb-6 pt-4">
