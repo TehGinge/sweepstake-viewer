@@ -1,6 +1,7 @@
 {
   "rules": {
     "games": {
+      ".read": "auth != null && query.orderByChild == 'meta/ownerUid' && query.equalTo == auth.uid",
       ".indexOn": ["meta/ownerUid"],
       "$gameId": {
         ".read": true,
