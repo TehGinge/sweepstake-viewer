@@ -39,6 +39,8 @@ jobs:
           VITE_FIREBASE_DATABASE_URL: ${{ secrets.VITE_FIREBASE_DATABASE_URL }}
           VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_SCORE_FEED_MODE: live
+          VITE_FOOTBALL_DATA_API_TOKEN: ${{ secrets.VITE_FOOTBALL_DATA_API_TOKEN }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
