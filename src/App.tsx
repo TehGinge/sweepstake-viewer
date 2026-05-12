@@ -82,7 +82,7 @@ function MainApp() {
   const getTournamentYear = () => {
     switch (tournamentId) {
       case 'WC26': return '2026';
-      case 'EURO28': return '2028';
+      // case 'EURO28': return '2028';
       default: return '';
     }
   };
@@ -186,7 +186,7 @@ function MainApp() {
                 className={`ml-auto md:ml-2 text-xs font-bold rounded px-2 py-1 ${CONTROLS.input}`}
               >
                 <option value="WC26">World Cup 2026</option>
-                <option value="EURO28">Euro 2028</option>
+                {/* <option value="EURO28">Euro 2028</option> */}
               </select>
             )}
             <button

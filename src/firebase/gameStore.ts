@@ -31,7 +31,8 @@ const isObject = (value: unknown): value is Record<string, unknown> => {
 };
 
 const isTournamentId = (value: unknown): value is TournamentId => {
-  return value === 'WC26' || value === 'EURO28';
+  return value === 'WC26';
+  // return value === 'WC26' || value === 'EURO28';
 };
 
 const normalizePlayers = (value: unknown): Player[] => {

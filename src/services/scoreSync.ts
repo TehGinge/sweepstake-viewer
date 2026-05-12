@@ -105,7 +105,8 @@ const getCompetitionCode = (tournamentId: TournamentId): string => {
     return (import.meta.env.VITE_SCORE_FEED_WC26_COMPETITION as string | undefined)?.trim() || 'WC';
   }
 
-  return (import.meta.env.VITE_SCORE_FEED_EURO28_COMPETITION as string | undefined)?.trim() || 'EC';
+  // return (import.meta.env.VITE_SCORE_FEED_EURO28_COMPETITION as string | undefined)?.trim() || 'EC';
+  return (import.meta.env.VITE_SCORE_FEED_WC26_COMPETITION as string | undefined)?.trim() || 'WC';
 };
 
 const getScoreFeedMode = (): ScoreFeedMode => {
@@ -160,7 +161,8 @@ const getSeasonYear = (tournamentId: TournamentId): string => {
     return (import.meta.env.VITE_SCORE_FEED_WC26_SEASON as string | undefined)?.trim() || '2026';
   }
 
-  return (import.meta.env.VITE_SCORE_FEED_EURO28_SEASON as string | undefined)?.trim() || '2028';
+  // return (import.meta.env.VITE_SCORE_FEED_EURO28_SEASON as string | undefined)?.trim() || '2028';
+  return (import.meta.env.VITE_SCORE_FEED_WC26_SEASON as string | undefined)?.trim() || '2026';
 };
 
 const resolveTeamId = (

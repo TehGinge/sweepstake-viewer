@@ -2,19 +2,20 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import { AppSettings, Match, PersistedAppState, Player, ScoreConfig, ScoreSyncStatus, Team, TournamentId } from '../types';
 import { generateInitialMatches } from '../data/matches';
 import { TEAMS as WC26_TEAMS, GROUPS as WC26_GROUPS } from '../data/teams';
-import { EURO28_TEAMS, EURO28_GROUPS, generateEuro28Matches } from '../data/euro28';
+// import { EURO28_TEAMS, EURO28_GROUPS, generateEuro28Matches } from '../data/euro28';
 import { CloudGameStatus, createCloudGame, deleteCloudGame, subscribeToCloudGame, updateCloudGameState } from '../firebase/gameStore';
 import { ensureAnonymousAuth, isFirebaseConfigured } from '../firebase/client';
 import { applyScoreUpdates, fetchTournamentScoreUpdates, getNextScoreSyncDelayMs } from '../services/scoreSync';
 
 const isValidTournamentId = (id: string): id is TournamentId => {
-  return id === 'WC26' || id === 'EURO28';
+  return id === 'WC26';
+  // return id === 'WC26' || id === 'EURO28';
 };
 
 const getTeams = (id: TournamentId) => {
   switch (id) {
     case 'WC26': return WC26_TEAMS;
-    case 'EURO28': return EURO28_TEAMS;
+    // case 'EURO28': return EURO28_TEAMS;
     default: return WC26_TEAMS;
   }
 };
@@ -22,7 +23,7 @@ const getTeams = (id: TournamentId) => {
 const getGroups = (id: TournamentId) => {
   switch (id) {
     case 'WC26': return WC26_GROUPS;
-    case 'EURO28': return EURO28_GROUPS;
+    // case 'EURO28': return EURO28_GROUPS;
     default: return WC26_GROUPS;
   }
 };
@@ -34,7 +35,7 @@ const getDefaultPlayers = () => {
 const getDefaultMatches = (id: TournamentId) => {
   switch (id) {
     case 'WC26': return generateInitialMatches();
-    case 'EURO28': return generateEuro28Matches();
+    // case 'EURO28': return generateEuro28Matches();
     default: return generateInitialMatches();
   }
 };

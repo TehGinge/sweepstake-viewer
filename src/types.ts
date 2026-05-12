@@ -1,5 +1,6 @@
 export type MatchStage = 'GROUP' | 'R32' | 'R16' | 'QF' | 'SF' | '3RD' | 'FINAL';
-export type TournamentId = 'WC26' | 'EURO28';
+export type TournamentId = 'WC26';
+// export type TournamentId = 'WC26' | 'EURO28'; // Archived until official Euro 2028 groups are confirmed.
 
 export interface Team {
   id: string; // 3-letter code
