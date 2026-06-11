@@ -178,9 +178,9 @@ export const createCloudGame = async (ownerUid: string, state: PersistedAppState
   const gameId = newGameRef.key;
 
   // Generate a random host secret
-  const hostSecret = Array.from({ length: 16 }, () =>
-    Math.floor(Math.random() * 36).toString(36)
-  ).join('');
+  const array = new Uint8Array(16);
+  window.crypto.getRandomValues(array);
+  const hostSecret = Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('');
 
   // Write game payload
   await set(newGameRef, {
