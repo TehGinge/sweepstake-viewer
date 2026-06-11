@@ -18,10 +18,14 @@ const LIVE_PROVIDER_STATUSES = new Set([
 const TEAM_CODE_ALIASES: Record<string, string> = {
   SAU: 'KSA',
   UKR: 'UKR',
+  ZAF: 'RSA',
 };
 
 const TEAM_NAME_ALIASES: Record<string, string> = {
   coteivoire: 'CIV',
+  cotedivoire: 'CIV',
+  southafrica: 'RSA',
+  czechia: 'CZE',
   ivorycoast: 'CIV',
   republicofireland: 'IRL',
   ireland: 'IRL',
@@ -211,7 +215,7 @@ const pickBestMatch = (candidates: Match[], kickoffUtc: string | null): Match | 
 
   const kickoffMs = parseDateMs(kickoffUtc || undefined);
   if (kickoffMs === null) {
-    return null;
+    return candidates[0];
   }
 
   let best: Match | null = null;
@@ -256,8 +260,8 @@ const toProviderMatches = (payload: any): ProviderMatch[] => {
         ? match.awayTeam.shortName
         : null,
     status: typeof match?.status === 'string' ? match.status : null,
-    homeScore: typeof match?.score?.fullTime?.home === 'number' ? match.score.fullTime.home : null,
-    awayScore: typeof match?.score?.fullTime?.away === 'number' ? match.score.fullTime.away : null,
+    homeScore: match?.score?.fullTime?.home != null ? Number(match.score.fullTime.home) : null,
+    awayScore: match?.score?.fullTime?.away != null ? Number(match.score.fullTime.away) : null,
   }));
 };
 
@@ -265,7 +269,7 @@ const deriveScoreUpdates = (providerMatches: ProviderMatch[], matches: Match[], 
   const updates: ScoreUpdate[] = [];
 
   const pendingMatches = matches.filter(
-    (match) => Boolean(match.homeTeamId && match.awayTeamId) && isUnfinishedMatch(match),
+    (match) => Boolean(match.homeTeamId && match.awayTeamId),
   );
 
   const teamByCode = new Map<string, string>();
@@ -429,9 +433,7 @@ export const applyScoreUpdates = (matches: Match[], updates: ScoreUpdate[]): App
       return match;
     }
 
-    if (!isUnfinishedMatch(match)) {
-      return match;
-    }
+
 
     if (match.homeScore === update.homeScore && match.awayScore === update.awayScore && match.status === update.status) {
       return match;
