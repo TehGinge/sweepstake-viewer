@@ -3,7 +3,7 @@ import { AppSettings, Match, PersistedAppState, Player, ScoreConfig, ScoreSyncSt
 import { generateInitialMatches } from '../data/matches';
 import { TEAMS as WC26_TEAMS, GROUPS as WC26_GROUPS } from '../data/teams';
 // import { EURO28_TEAMS, EURO28_GROUPS, generateEuro28Matches } from '../data/euro28';
-import { CloudGameStatus, createCloudGame, deleteCloudGame, subscribeToCloudGame, updateCloudGameState } from '../firebase/gameStore';
+import { CloudGameStatus, createCloudGame, deleteCloudGame, subscribeToCloudGame, updateCloudGameState, claimCloudGame, getCloudGameSecret } from '../firebase/gameStore';
 import { ensureAnonymousAuth, isFirebaseConfigured } from '../firebase/client';
 import { applyScoreUpdates, fetchTournamentScoreUpdates, getNextScoreSyncDelayMs } from '../services/scoreSync';
 
@@ -182,9 +182,10 @@ const clearLiveGameHash = (): void => {
 interface AppProviderProps {
   children: React.ReactNode;
   cloudGameId?: string | null;
+  hostSecret?: string | null;
 }
 
-export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId = null }) => {
+export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId = null, hostSecret = null }) => {
   const [tournamentId, setTournamentIdState] = useState<TournamentId>('WC26');
   const [players, setPlayersState] = useState<Player[]>(INITIAL_PLAYERS);
   const [matchesState, setMatchesState] = useState<Match[]>([]);
@@ -312,13 +313,29 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
     setIsLoaded(false);
 
     ensureAnonymousAuth()
-      .then((user) => {
+      .then(async (user) => {
         if (isCancelled) return;
         if (!user) {
           throw new Error('Could not authenticate with Firebase.');
         }
 
         setCloudCurrentUid(user.uid);
+
+        if (hostSecret) {
+          try {
+            await claimCloudGame(cloudGameId, hostSecret, user.uid);
+            
+            // Remove hostSecret from URL so it doesn't leak if the user copies the URL
+            const hashParams = new URLSearchParams(window.location.hash.slice(1));
+            hashParams.delete('hostSecret');
+            const newHash = hashParams.toString();
+            window.history.replaceState(null, '', newHash ? `#${newHash}` : window.location.pathname);
+          } catch (e) {
+            console.error('Failed to claim game with secret', e);
+          }
+        }
+
+        if (isCancelled) return;
 
         unsubscribe = subscribeToCloudGame(
           cloudGameId,

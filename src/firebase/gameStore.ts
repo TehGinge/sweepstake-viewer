@@ -175,7 +175,14 @@ export const createCloudGame = async (ownerUid: string, state: PersistedAppState
   }
 
   const now = Date.now();
+  const gameId = newGameRef.key;
 
+  // Generate a random host secret
+  const hostSecret = Array.from({ length: 16 }, () =>
+    Math.floor(Math.random() * 36).toString(36)
+  ).join('');
+
+  // Write game payload
   await set(newGameRef, {
     meta: {
       ownerUid,
@@ -186,7 +193,43 @@ export const createCloudGame = async (ownerUid: string, state: PersistedAppState
     state,
   });
 
-  return newGameRef.key;
+  // Write secret
+  await set(ref(services.database, `gameSecrets/${gameId}`), hostSecret);
+
+  return gameId;
+};
+
+export const claimCloudGame = async (gameId: string, hostSecret: string, newOwnerUid: string): Promise<void> => {
+  const services = getFirebaseServices();
+  if (!services) {
+    throw new Error('Firebase is not configured.');
+  }
+
+  const gameRef = ref(services.database, `games/${gameId}`);
+  const snapshot = await get(gameRef);
+  if (!snapshot.exists()) {
+    throw new Error('Game not found.');
+  }
+
+  // Update ownership by passing the claimSecret to pass security rules
+  await update(gameRef, {
+    'meta/ownerUid': newOwnerUid,
+    'meta/claimSecret': hostSecret,
+    'meta/updatedAt': Date.now(),
+  });
+};
+
+export const getCloudGameSecret = async (gameId: string): Promise<string | null> => {
+  const services = getFirebaseServices();
+  if (!services) return null;
+
+  try {
+    const secretRef = ref(services.database, `gameSecrets/${gameId}`);
+    const snapshot = await get(secretRef);
+    return snapshot.exists() ? snapshot.val() : null;
+  } catch (err) {
+    return null; // Will fail if not owner due to rules
+  }
 };
 
 export const updateCloudGameState = async (gameId: string, state: PersistedAppState): Promise<void> => {
@@ -208,6 +251,7 @@ export const deleteCloudGame = async (gameId: string): Promise<void> => {
   }
 
   await remove(ref(services.database, `games/${gameId}`));
+  await remove(ref(services.database, `gameSecrets/${gameId}`)).catch(() => {});
 };
 
 export const getUserCloudGames = async (ownerUid: string): Promise<{ id: string; meta: CloudGameRecord['meta'] }[]> => {

@@ -370,9 +370,10 @@ export default function App() {
 
   const hashParams = useMemo(() => getHashParams(hash), [hash]);
   const cloudGameId = hashParams.get('game');
+  const hostSecret = hashParams.get('hostSecret');
 
   return (
-    <AppProvider cloudGameId={cloudGameId}>
+    <AppProvider cloudGameId={cloudGameId} hostSecret={hostSecret}>
       <MainApp />
     </AppProvider>
   );
