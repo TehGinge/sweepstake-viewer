@@ -10,7 +10,7 @@ export interface Team {
   fifaRanking: number;
 }
 
-export type MatchStatus = 'SCHEDULED' | 'FINISHED';
+export type MatchStatus = 'SCHEDULED' | 'LIVE' | 'FINISHED';
 
 export interface Match {
   id: string;

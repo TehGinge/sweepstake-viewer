@@ -4,7 +4,7 @@ export function calculateTeamPoints(teamId: string, matches: Match[], config: Sc
   let points = 0;
 
   // Calculate points from all matches (group and knockouts)
-  const teamMatches = matches.filter(m => m.status === 'FINISHED' && (m.homeTeamId === teamId || m.awayTeamId === teamId));
+  const teamMatches = matches.filter(m => (m.status === 'FINISHED' || m.status === 'LIVE') && (m.homeTeamId === teamId || m.awayTeamId === teamId));
   
   teamMatches.forEach(m => {
     if (m.homeScore === null || m.awayScore === null) return;
@@ -47,7 +47,7 @@ export function generateLeaderboard(players: Player[], matches: Match[], config:
 
 export function getGroupStandings(groupId: string, matches: Match[], teams: Team[]) {
     const groupTeams = teams.filter(t => t.group === groupId);
-    const groupMatches = matches.filter(m => m.stage === 'GROUP' && m.group === groupId && m.status === 'FINISHED');
+    const groupMatches = matches.filter(m => m.stage === 'GROUP' && m.group === groupId && (m.status === 'FINISHED' || m.status === 'LIVE'));
     
     const standings = groupTeams.map(team => {
         let p = 0, w = 0, d = 0, l = 0, gf = 0, ga = 0, pts = 0;

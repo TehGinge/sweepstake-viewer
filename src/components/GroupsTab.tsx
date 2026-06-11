@@ -247,7 +247,12 @@ export const GroupsTab: React.FC<{ initialGroup?: string | null; onGroupHandled?
                         disabled={isReadOnly}
                         className={`w-12 h-10 text-center font-black text-lg rounded ${CONTROLS.input} disabled:bg-slate-200 disabled:dark:bg-slate-900 disabled:text-slate-500 disabled:dark:text-slate-500`}
                       />
-                      <span className="text-slate-500 dark:text-slate-400 font-bold px-1 text-sm">VS</span>
+                      <div className="flex flex-col items-center justify-center px-1">
+                        <span className="text-slate-500 dark:text-slate-400 font-bold text-sm leading-none">VS</span>
+                        {match.status === 'LIVE' && (
+                          <span className="animate-pulse text-red-500 font-black text-[10px] tracking-wider mt-1 leading-none">LIVE</span>
+                        )}
+                      </div>
                       <input 
                         type="number" 
                         min="0"

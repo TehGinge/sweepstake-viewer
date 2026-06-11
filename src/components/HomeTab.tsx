@@ -109,7 +109,7 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
       const assigneeIndex = players.findIndex(p => p.teamIds.includes(team.id));
       const assignee = assigneeIndex !== -1 ? players[assigneeIndex] : null;
       const points = calculateTeamPoints(team.id, matches, config);
-      const played = matches.filter(m => (m.homeTeamId === team.id || m.awayTeamId === team.id) && m.status === 'FINISHED').length;
+      const played = matches.filter(m => (m.homeTeamId === team.id || m.awayTeamId === team.id) && (m.status === 'FINISHED' || m.status === 'LIVE')).length;
       return {
         ...team,
         assigneeName: assignee ? assignee.name : 'Unassigned',
@@ -162,7 +162,7 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
   }
 
   const recentMatches = matches
-    .filter(m => m.status === 'FINISHED' && m.date)
+    .filter(m => (m.status === 'FINISHED' || m.status === 'LIVE') && m.date)
     .sort((a, b) => new Date(b.date!).getTime() - new Date(a.date!).getTime())
     .slice(0, 2)
     .reverse();
@@ -219,7 +219,7 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
                 <div className="text-right shrink-0 ml-2">
                   <span className={`text-[9px] font-bold uppercase tracking-widest block text-slate-500 dark:text-slate-400`}>Total</span>
                   <span className={`text-xl font-black leading-none text-slate-900 dark:text-white`}>
-                    {entry.teams.some(t => matches.some(m => (m.homeTeamId === t.id || m.awayTeamId === t.id) && m.status === 'FINISHED')) ? entry.points : '-'}
+                    {entry.teams.some(t => matches.some(m => (m.homeTeamId === t.id || m.awayTeamId === t.id) && (m.status === 'FINISHED' || m.status === 'LIVE'))) ? entry.points : '-'}
                   </span>
                 </div>
               </div>
@@ -247,7 +247,7 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
                   });
 
                   return sortedPlayerTeams.map(({ team, pts }) => {
-                   const playedCount = matches.filter(m => (m.homeTeamId === team.id || m.awayTeamId === team.id) && m.status === 'FINISHED').length;
+                   const playedCount = matches.filter(m => (m.homeTeamId === team.id || m.awayTeamId === team.id) && (m.status === 'FINISHED' || m.status === 'LIVE')).length;
                    const hasPlayed = playedCount > 0;
                    let cardBorderClass = 'border-slate-100 dark:border-slate-700/50 hover:border-slate-200 dark:hover:border-slate-600 shadow-sm';
                    const pos = groupStandingsMap.get(team.id);
@@ -448,8 +448,11 @@ export const HomeTab: React.FC<{ setActiveTab: (tab: any) => void; onNavigateToG
                     }}
                     className="w-full text-left bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 hover:shadow-md transition-all cursor-pointer"
                   >
-                    <div className={`text-[10px] uppercase font-bold mb-3 flex justify-between items-center px-2 py-1.5 rounded-md border ${match.status === 'FINISHED' ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}`}>
-                      <span className="truncate pr-2">{`Match ${matchNumber} • ${match.stage === 'GROUP' ? `Group ${match.group}` : match.stage}`}</span>
+                    <div className={`text-[10px] uppercase font-bold mb-3 flex justify-between items-center px-2 py-1.5 rounded-md border ${match.status === 'FINISHED' ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300' : match.status === 'LIVE' ? 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400' : 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}`}>
+                      <span className="truncate pr-2 flex items-center gap-1.5">
+                        {`Match ${matchNumber} • ${match.stage === 'GROUP' ? `Group ${match.group}` : match.stage}`}
+                        {match.status === 'LIVE' && <span className="animate-pulse bg-red-500 text-white px-1 py-0.5 rounded leading-none">LIVE</span>}
+                      </span>
                       <span className="shrink-0 font-medium">
                         {match.date ? new Date(match.date).toLocaleString('en-GB', { timeZone: 'Europe/London', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' BST' : 'TBD'}
                       </span>
