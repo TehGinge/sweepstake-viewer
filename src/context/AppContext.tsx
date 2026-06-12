@@ -50,6 +50,8 @@ interface AppState {
   config: ScoreConfig;
   settings: AppSettings;
   scoreSyncStatus: ScoreSyncStatus;
+  scoreSyncLogs: ScoreSyncLogEntry[];
+  clearScoreSyncLogs: () => void;
   triggerScoreSync: () => Promise<void>;
   isReadOnly: boolean;
   cloudGameId: string | null;
@@ -98,6 +100,18 @@ const SCORE_SYNC_MAX_CALLS_PER_MINUTE = 10;
 const SCORE_SYNC_MIN_GAP_MS = Math.ceil((60_000 / SCORE_SYNC_MAX_CALLS_PER_MINUTE) * 1.1);
 const SCORE_SYNC_JITTER_MS = 2_000;
 const SCORE_SYNC_LAST_REQUEST_KEY = 'scoreSync:lastRequestAt';
+const SCORE_SYNC_LOG_LIMIT = 40;
+
+type ScoreSyncTrigger = 'auto' | 'manual';
+type ScoreSyncLogLevel = 'info' | 'success' | 'warn' | 'error';
+
+interface ScoreSyncLogEntry {
+  id: string;
+  timestamp: number;
+  trigger: ScoreSyncTrigger;
+  level: ScoreSyncLogLevel;
+  message: string;
+}
 
 const getScoreSyncCooldownRemainingMs = (nowMs: number = Date.now()): number => {
   try {
@@ -199,6 +213,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
   const [cloudCurrentUid, setCloudCurrentUid] = useState<string | null>(null);
   const [cloudOwnerUid, setCloudOwnerUid] = useState<string | null>(null);
   const [scoreSyncStatus, setScoreSyncStatus] = useState<ScoreSyncStatus>(DEFAULT_SCORE_SYNC_STATUS);
+  const [scoreSyncLogs, setScoreSyncLogs] = useState<ScoreSyncLogEntry[]>([]);
 
   const teams = getTeams(tournamentId);
   const groups = getGroups(tournamentId);
@@ -235,13 +250,38 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
     });
   };
 
-  const executeScoreSync = useCallback(async () => {
+  const appendScoreSyncLog = useCallback((trigger: ScoreSyncTrigger, level: ScoreSyncLogLevel, message: string) => {
+    const entry: ScoreSyncLogEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      timestamp: Date.now(),
+      trigger,
+      level,
+      message,
+    };
+
+    setScoreSyncLogs((prev) => [entry, ...prev].slice(0, SCORE_SYNC_LOG_LIMIT));
+  }, []);
+
+  const clearScoreSyncLogs = useCallback(() => {
+    setScoreSyncLogs([]);
+  }, []);
+
+  const executeScoreSync = useCallback(async (trigger: ScoreSyncTrigger) => {
     if (scoreSyncInFlightRef.current) {
+      if (trigger === 'manual') {
+        appendScoreSyncLog(trigger, 'warn', 'Manual sync skipped because another sync is already running.');
+      }
       return;
     }
 
+    const startedAt = Date.now();
+
+    if (trigger === 'manual') {
+      appendScoreSyncLog(trigger, 'info', 'Manual sync started.');
+    }
+
     scoreSyncInFlightRef.current = true;
-    markScoreSyncRequest(Date.now());
+    markScoreSyncRequest(startedAt);
 
     setScoreSyncStatus((prev) => ({
       ...prev,
@@ -260,6 +300,10 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
           source: result.source,
           lastError: result.reason,
         }));
+
+        if (trigger === 'manual') {
+          appendScoreSyncLog(trigger, 'error', `Manual sync disabled: ${result.reason}`);
+        }
         return;
       }
 
@@ -281,24 +325,42 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
         lastAppliedCount: appliedCount,
         lastError: null,
       }));
+
+      if (trigger === 'manual') {
+        appendScoreSyncLog(
+          trigger,
+          'success',
+          `Manual sync complete via ${result.source}. Provider updates: ${result.updates.length}, applied: ${appliedCount}.`,
+        );
+      }
     } catch (error: any) {
+      const message = error?.message || 'Automatic score sync failed.';
       setScoreSyncStatus((prev) => ({
         ...prev,
         state: 'error',
-        lastError: error?.message || 'Automatic score sync failed.',
+        lastError: message,
       }));
+
+      if (trigger === 'manual') {
+        appendScoreSyncLog(trigger, 'error', `Manual sync failed: ${message}`);
+      }
     } finally {
       scoreSyncInFlightRef.current = false;
     }
-  }, []);
+  }, [appendScoreSyncLog]);
 
   const triggerScoreSync = useCallback(async () => {
     if (!isLoaded || computedReadOnly) {
+      if (!isLoaded) {
+        appendScoreSyncLog('manual', 'warn', 'Manual sync skipped because the app is still loading.');
+      } else {
+        appendScoreSyncLog('manual', 'warn', 'Manual sync skipped in viewer mode.');
+      }
       return;
     }
 
-    await executeScoreSync();
-  }, [computedReadOnly, executeScoreSync, isLoaded]);
+    await executeScoreSync('manual');
+  }, [appendScoreSyncLog, computedReadOnly, executeScoreSync, isLoaded]);
 
   useEffect(() => {
     latestSyncInputsRef.current = {
@@ -535,7 +597,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
         return;
       }
 
-      await executeScoreSync();
+      await executeScoreSync('auto');
 
       if (isCancelled) return;
       scheduleNextSync();
@@ -727,6 +789,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
       config,
       settings,
       scoreSyncStatus,
+      scoreSyncLogs,
+      clearScoreSyncLogs,
       triggerScoreSync,
       isReadOnly: computedReadOnly,
       cloudGameId,
