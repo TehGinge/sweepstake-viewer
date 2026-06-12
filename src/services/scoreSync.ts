@@ -2,6 +2,7 @@ import { Match, Team, TournamentId } from '../types';
 
 const LIVE_SOURCE_NAME = 'football-data.org';
 const MOCK_SOURCE_NAME = 'mock-score-feed';
+const STATIC_SOURCE_NAME = 'score-feed-snapshot';
 
 const FINISHED_PROVIDER_STATUSES = new Set([
   'FINISHED',
@@ -49,7 +50,7 @@ const IDLE_SYNC_DELAY_MS = 30 * 60 * 1000;
 const NO_PENDING_SYNC_DELAY_MS = 60 * 60 * 1000;
 const DEV_PROXY_BASE_URL = '/api/football-data';
 
-type ScoreFeedMode = 'live' | 'mock';
+type ScoreFeedMode = 'live' | 'mock' | 'static';
 
 type ProviderMatch = {
   kickoffUtc: string | null;
@@ -121,7 +122,21 @@ const getCompetitionCode = (tournamentId: TournamentId): string => {
 
 const getScoreFeedMode = (): ScoreFeedMode => {
   const configured = (import.meta.env.VITE_SCORE_FEED_MODE as string | undefined)?.trim().toLowerCase();
+  if (configured === 'static') return 'static';
   return configured === 'mock' ? 'mock' : 'live';
+};
+
+const getStaticScoreFeedUrl = (tournamentId: TournamentId): string => {
+  const configured = (import.meta.env.VITE_SCORE_FEED_STATIC_URL as string | undefined)?.trim();
+  if (configured) {
+    return configured;
+  }
+
+  if (tournamentId === 'WC26') {
+    return '/score-feed/wc26.json';
+  }
+
+  return '/score-feed/wc26.json';
 };
 
 const getMockUpdateLimit = (): number => {
@@ -358,6 +373,10 @@ const getFootballDataBaseUrl = (): string => {
   return 'https://api.football-data.org/v4';
 };
 
+const isDirectFootballDataUrl = (baseUrl: string): boolean => {
+  return /^https?:\/\/api\.football-data\.org(?:\/v4)?$/i.test(baseUrl.replace(/\/+$/, ''));
+};
+
 export const fetchTournamentScoreUpdates = async ({
   tournamentId,
   matches,
@@ -372,6 +391,26 @@ export const fetchTournamentScoreUpdates = async ({
       source: MOCK_SOURCE_NAME,
       fetchedAt,
       updates: deriveMockScoreUpdates(matches),
+    };
+  }
+
+  if (scoreFeedMode === 'static') {
+    const snapshotUrl = getStaticScoreFeedUrl(tournamentId);
+    const response = await fetch(snapshotUrl);
+
+    if (!response.ok) {
+      throw new Error(`Static score feed request failed (${response.status} ${response.statusText}) at ${snapshotUrl}.`);
+    }
+
+    const payload = await response.json();
+    const providerMatches = toProviderMatches(payload);
+    const updates = deriveScoreUpdates(providerMatches, matches, teams);
+
+    return {
+      status: 'ok',
+      source: STATIC_SOURCE_NAME,
+      fetchedAt,
+      updates,
     };
   }
 
@@ -392,14 +431,38 @@ export const fetchTournamentScoreUpdates = async ({
   const baseUrl = getFootballDataBaseUrl();
   const endpoint = `${baseUrl}/competitions/${encodeURIComponent(competition)}/matches?season=${encodeURIComponent(season)}`;
 
-  const response = await fetch(endpoint, {
-    headers: {
-      'X-Auth-Token': apiToken,
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      headers: {
+        'X-Auth-Token': apiToken,
+      },
+    });
+  } catch (error: any) {
+    const reason = error?.message || 'Failed to fetch';
+
+    if (!import.meta.env.DEV && isDirectFootballDataUrl(baseUrl)) {
+      throw new Error(
+        `Score sync request could not be sent (${reason}). Production browsers often block direct football-data.org calls due to CORS. ` +
+        `Use a backend proxy and set VITE_FOOTBALL_DATA_API_BASE_URL to that proxy URL.`,
+      );
+    }
+
+    throw new Error(`Score sync request could not be sent (${reason}). Endpoint: ${endpoint}`);
+  }
 
   if (!response.ok) {
-    throw new Error(`Score sync request failed (${response.status}).`);
+    let details = '';
+    try {
+      const text = (await response.text()).trim();
+      if (text) {
+        details = ` Response: ${text.slice(0, 200)}`;
+      }
+    } catch {
+      // Ignore response body parsing failures.
+    }
+
+    throw new Error(`Score sync request failed (${response.status} ${response.statusText}) at ${endpoint}.${details}`);
   }
 
   const payload = await response.json();

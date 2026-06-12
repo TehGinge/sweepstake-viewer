@@ -66,6 +66,10 @@ Add these values to `.env` to enable it:
 # Use live provider (default) or mock provider for testing
 VITE_SCORE_FEED_MODE=live
 
+# Optional: static snapshot mode (no runtime API calls from browser)
+# VITE_SCORE_FEED_MODE=static
+# VITE_SCORE_FEED_STATIC_URL=/score-feed/wc26.json
+
 VITE_FOOTBALL_DATA_API_TOKEN=your_token_here
 
 # Optional overrides (defaults shown)
@@ -86,8 +90,20 @@ Notes:
 - Polling cadence is adaptive and increases around active fixtures.
 - A single fetch cycle covers all users in a live game because only the Host writes updates.
 - Local development uses the built-in Vite proxy path (`/api/football-data`) by default to bypass browser CORS restrictions.
+- Static production deployments (for example GitHub Pages) should not call `https://api.football-data.org/v4` directly from the browser because CORS may block requests. Use a backend/serverless proxy and set `VITE_FOOTBALL_DATA_API_BASE_URL` to that proxy URL.
+- If you want no additional servers in production, use `VITE_SCORE_FEED_MODE=static` and publish a snapshot file (for example `/score-feed/wc26.json`) during CI.
 - After changing `.env` or proxy settings, restart `npm run dev`.
 - The client enforces a minimum delay between API calls (~6.6s) with jitter to stay within the free-tier 10 calls/minute ceiling per browser session.
+
+### GitHub Pages No-Server Setup (Recommended)
+
+This repo includes a no-server production path for GitHub Pages:
+
+1. A CI step runs `npm run update:score-feed` to fetch official matches using the secret token.
+2. The step writes `public/score-feed/wc26.json`.
+3. The frontend is built with `VITE_SCORE_FEED_MODE=static` and reads that same-origin snapshot file.
+
+This avoids browser CORS restrictions and keeps your API token out of the public JS bundle.
 
 ### Testing Before Fixtures Are Played
 
