@@ -4,7 +4,19 @@ import { getGroupStandings } from '../utils/scoring';
 import { CONTROLS, SURFACES, TEXT, getPlayerTheme, getResultBadgeClass } from '../utils/theme';
 
 export const GroupsTab: React.FC<{ initialGroup?: string | null; onGroupHandled?: () => void; onTeamClick: (teamId: string) => void }> = ({ initialGroup, onGroupHandled, onTeamClick }) => {
-  const { matches, setMatches, updateMatch, players, teams, groups, tournamentId, settings, isReadOnly } = useAppContext();
+  const {
+    matches,
+    setMatches,
+    updateMatch,
+    players,
+    teams,
+    groups,
+    tournamentId,
+    settings,
+    isReadOnly,
+    scoreSyncStatus,
+    triggerScoreSync,
+  } = useAppContext();
   const [activeGroup, setActiveGroup] = useState<string>(initialGroup || 'A');
 
   useEffect(() => {
@@ -76,20 +88,33 @@ export const GroupsTab: React.FC<{ initialGroup?: string | null; onGroupHandled?
               <h2 className={`text-xl font-black ${TEXT.primary}`}>Group {activeGroup} Standings</h2>
               <span className={`inline-flex items-center px-2.5 py-1 rounded text-sm font-semibold border bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600`}>Group {activeGroup}</span>
             </div>
-            {settings.allowSimulate && !isReadOnly && (
+            {!isReadOnly && (
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    void triggerScoreSync();
+                  }}
+                  disabled={scoreSyncStatus.state === 'syncing'}
+                  className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/30 rounded hover:bg-sky-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {scoreSyncStatus.state === 'syncing' ? 'Syncing...' : 'Sync Now'}
+                </button>
+                {settings.allowSimulate && (
                 <button
                   onClick={simulateActiveGroup}
                   className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors"
                 >
                   Simulate Group {activeGroup}
                 </button>
+                )}
+                {settings.allowSimulate && (
                 <button
                   onClick={simulateGroupMatches}
                   className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors"
                 >
                   Simulate All Groups
                 </button>
+                )}
               </div>
             )}
           </div>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppSettings, Match, PersistedAppState, Player, ScoreConfig, ScoreSyncStatus, Team, TournamentId } from '../types';
 import { generateInitialMatches } from '../data/matches';
 import { TEAMS as WC26_TEAMS, GROUPS as WC26_GROUPS } from '../data/teams';
@@ -50,6 +50,7 @@ interface AppState {
   config: ScoreConfig;
   settings: AppSettings;
   scoreSyncStatus: ScoreSyncStatus;
+  triggerScoreSync: () => Promise<void>;
   isReadOnly: boolean;
   cloudGameId: string | null;
   cloudStatus: CloudGameStatus;
@@ -233,6 +234,71 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
       return nextState;
     });
   };
+
+  const executeScoreSync = useCallback(async () => {
+    if (scoreSyncInFlightRef.current) {
+      return;
+    }
+
+    scoreSyncInFlightRef.current = true;
+    markScoreSyncRequest(Date.now());
+
+    setScoreSyncStatus((prev) => ({
+      ...prev,
+      state: 'syncing',
+      lastError: null,
+    }));
+
+    try {
+      const syncInputs = latestSyncInputsRef.current;
+      const result = await fetchTournamentScoreUpdates(syncInputs);
+
+      if (result.status === 'disabled') {
+        setScoreSyncStatus((prev) => ({
+          ...prev,
+          state: 'disabled',
+          source: result.source,
+          lastError: result.reason,
+        }));
+        return;
+      }
+
+      let appliedCount = 0;
+
+      if (result.updates.length > 0) {
+        setMatchesState((prevMatches) => {
+          const applied = applyScoreUpdates(prevMatches, result.updates);
+          appliedCount = applied.appliedCount;
+          return applied.matches;
+        });
+      }
+
+      setScoreSyncStatus((prev) => ({
+        ...prev,
+        state: 'idle',
+        source: result.source,
+        lastSyncedAt: result.fetchedAt,
+        lastAppliedCount: appliedCount,
+        lastError: null,
+      }));
+    } catch (error: any) {
+      setScoreSyncStatus((prev) => ({
+        ...prev,
+        state: 'error',
+        lastError: error?.message || 'Automatic score sync failed.',
+      }));
+    } finally {
+      scoreSyncInFlightRef.current = false;
+    }
+  }, []);
+
+  const triggerScoreSync = useCallback(async () => {
+    if (!isLoaded || computedReadOnly) {
+      return;
+    }
+
+    await executeScoreSync();
+  }, [computedReadOnly, executeScoreSync, isLoaded]);
 
   useEffect(() => {
     latestSyncInputsRef.current = {
@@ -469,60 +535,10 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
         return;
       }
 
-      scoreSyncInFlightRef.current = true;
-      markScoreSyncRequest(nowMs);
+      await executeScoreSync();
 
-      setScoreSyncStatus((prev) => ({
-        ...prev,
-        state: 'syncing',
-        lastError: null,
-      }));
-
-      try {
-        const syncInputs = latestSyncInputsRef.current;
-        const result = await fetchTournamentScoreUpdates(syncInputs);
-        if (isCancelled) return;
-
-        if (result.status === 'disabled') {
-          setScoreSyncStatus((prev) => ({
-            ...prev,
-            state: 'disabled',
-            source: result.source,
-            lastError: result.reason,
-          }));
-          return;
-        }
-
-        let appliedCount = 0;
-
-        if (result.updates.length > 0) {
-          setMatchesState((prevMatches) => {
-            const applied = applyScoreUpdates(prevMatches, result.updates);
-            appliedCount = applied.appliedCount;
-            return applied.matches;
-          });
-        }
-
-        setScoreSyncStatus((prev) => ({
-          ...prev,
-          state: 'idle',
-          source: result.source,
-          lastSyncedAt: result.fetchedAt,
-          lastAppliedCount: appliedCount,
-          lastError: null,
-        }));
-      } catch (error: any) {
-        if (isCancelled) return;
-
-        setScoreSyncStatus((prev) => ({
-          ...prev,
-          state: 'error',
-          lastError: error?.message || 'Automatic score sync failed.',
-        }));
-      } finally {
-        scoreSyncInFlightRef.current = false;
-        scheduleNextSync();
-      }
+      if (isCancelled) return;
+      scheduleNextSync();
     };
 
     void runSyncCycle();
@@ -531,7 +547,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
       isCancelled = true;
       clearSyncTimer();
     };
-  }, [computedReadOnly, isLoaded]);
+  }, [computedReadOnly, executeScoreSync, isLoaded]);
 
   useEffect(() => {
     if (isLoaded) {
@@ -711,6 +727,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
       config,
       settings,
       scoreSyncStatus,
+      triggerScoreSync,
       isReadOnly: computedReadOnly,
       cloudGameId,
       cloudStatus,

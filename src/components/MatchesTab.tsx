@@ -13,7 +13,18 @@ const STAGES: { stage: MatchStage; title: string }[] = [
 ];
 
 export const MatchesTab: React.FC = () => {
-  const { matches, setMatches, updateMatch, teams, tournamentId, players, settings, scoreSyncStatus, isReadOnly } = useAppContext();
+  const {
+    matches,
+    setMatches,
+    updateMatch,
+    teams,
+    tournamentId,
+    players,
+    settings,
+    scoreSyncStatus,
+    isReadOnly,
+    triggerScoreSync,
+  } = useAppContext();
   const [activeStage, setActiveStage] = useState<MatchStage>(tournamentId === 'WC26' ? 'R32' : 'R16');
 
   const stageMatches = matches.filter(m => m.stage === activeStage);
@@ -105,13 +116,26 @@ export const MatchesTab: React.FC = () => {
               <h2 className={`text-xl font-black ${TEXT.primary}`}>{STAGES.find(s => s.stage === activeStage)?.title}</h2>
               <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{getScoreSyncLabel()}</p>
             </div>
-              {settings.allowSimulate && !isReadOnly && (
-              <button
-                 onClick={simulateStageMatches}
-                 className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors"
-               >
-                 Simulate Round
-               </button>
+            {!isReadOnly && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    void triggerScoreSync();
+                  }}
+                  disabled={scoreSyncStatus.state === 'syncing'}
+                  className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/30 rounded hover:bg-sky-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {scoreSyncStatus.state === 'syncing' ? 'Syncing...' : 'Sync Now'}
+                </button>
+                {settings.allowSimulate && (
+                  <button
+                    onClick={simulateStageMatches}
+                    className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors"
+                  >
+                    Simulate Round
+                  </button>
+                )}
+              </div>
             )}
           </div>
           
