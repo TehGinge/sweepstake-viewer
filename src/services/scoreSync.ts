@@ -10,13 +10,22 @@ const FINISHED_PROVIDER_STATUSES = new Set([
   'PENALTY_SHOOTOUT',
 ]);
 
+const LIVE_PROVIDER_STATUSES = new Set([
+  'IN_PLAY',
+  'PAUSED',
+]);
+
 const TEAM_CODE_ALIASES: Record<string, string> = {
   SAU: 'KSA',
   UKR: 'UKR',
+  ZAF: 'RSA',
 };
 
 const TEAM_NAME_ALIASES: Record<string, string> = {
   coteivoire: 'CIV',
+  cotedivoire: 'CIV',
+  southafrica: 'RSA',
+  czechia: 'CZE',
   ivorycoast: 'CIV',
   republicofireland: 'IRL',
   ireland: 'IRL',
@@ -33,7 +42,7 @@ const TEAM_NAME_ALIASES: Record<string, string> = {
 
 const ACTIVE_WINDOW_BEFORE_KICKOFF_MS = 10 * 60 * 1000;
 const ACTIVE_WINDOW_AFTER_KICKOFF_MS = 140 * 60 * 1000;
-const ACTIVE_SYNC_DELAY_MS = 75 * 1000;
+const ACTIVE_SYNC_DELAY_MS = 30 * 1000;
 const RECENTLY_DUE_SYNC_DELAY_MS = 10 * 60 * 1000;
 const UPCOMING_SYNC_DELAY_MS = 15 * 60 * 1000;
 const IDLE_SYNC_DELAY_MS = 30 * 60 * 1000;
@@ -57,6 +66,7 @@ export interface ScoreUpdate {
   matchId: string;
   homeScore: number;
   awayScore: number;
+  status: 'FINISHED' | 'LIVE';
   source: string;
 }
 
@@ -151,6 +161,7 @@ const deriveMockScoreUpdates = (matches: Match[]): ScoreUpdate[] => {
       matchId: match.id,
       homeScore,
       awayScore,
+      status: 'FINISHED',
       source: MOCK_SOURCE_NAME,
     };
   });
@@ -204,7 +215,7 @@ const pickBestMatch = (candidates: Match[], kickoffUtc: string | null): Match | 
 
   const kickoffMs = parseDateMs(kickoffUtc || undefined);
   if (kickoffMs === null) {
-    return null;
+    return candidates[0];
   }
 
   let best: Match | null = null;
@@ -249,8 +260,8 @@ const toProviderMatches = (payload: any): ProviderMatch[] => {
         ? match.awayTeam.shortName
         : null,
     status: typeof match?.status === 'string' ? match.status : null,
-    homeScore: typeof match?.score?.fullTime?.home === 'number' ? match.score.fullTime.home : null,
-    awayScore: typeof match?.score?.fullTime?.away === 'number' ? match.score.fullTime.away : null,
+    homeScore: match?.score?.fullTime?.home != null ? Number(match.score.fullTime.home) : null,
+    awayScore: match?.score?.fullTime?.away != null ? Number(match.score.fullTime.away) : null,
   }));
 };
 
@@ -258,7 +269,7 @@ const deriveScoreUpdates = (providerMatches: ProviderMatch[], matches: Match[], 
   const updates: ScoreUpdate[] = [];
 
   const pendingMatches = matches.filter(
-    (match) => Boolean(match.homeTeamId && match.awayTeamId) && isUnfinishedMatch(match),
+    (match) => Boolean(match.homeTeamId && match.awayTeamId),
   );
 
   const teamByCode = new Map<string, string>();
@@ -281,7 +292,7 @@ const deriveScoreUpdates = (providerMatches: ProviderMatch[], matches: Match[], 
   const consumedMatchIds = new Set<string>();
 
   for (const providerMatch of providerMatches) {
-    if (!providerMatch.status || !FINISHED_PROVIDER_STATUSES.has(providerMatch.status)) {
+    if (!providerMatch.status || (!FINISHED_PROVIDER_STATUSES.has(providerMatch.status) && !LIVE_PROVIDER_STATUSES.has(providerMatch.status))) {
       continue;
     }
 
@@ -320,10 +331,13 @@ const deriveScoreUpdates = (providerMatches: ProviderMatch[], matches: Match[], 
       continue;
     }
 
+    const matchStatus = FINISHED_PROVIDER_STATUSES.has(providerMatch.status) ? 'FINISHED' : 'LIVE';
+
     updates.push({
       matchId: chosenMatch.id,
       homeScore,
       awayScore,
+      status: matchStatus,
       source: LIVE_SOURCE_NAME,
     });
   }
@@ -419,11 +433,9 @@ export const applyScoreUpdates = (matches: Match[], updates: ScoreUpdate[]): App
       return match;
     }
 
-    if (!isUnfinishedMatch(match)) {
-      return match;
-    }
 
-    if (match.homeScore === update.homeScore && match.awayScore === update.awayScore && match.status === 'FINISHED') {
+
+    if (match.homeScore === update.homeScore && match.awayScore === update.awayScore && match.status === update.status) {
       return match;
     }
 
@@ -434,7 +446,7 @@ export const applyScoreUpdates = (matches: Match[], updates: ScoreUpdate[]): App
       ...match,
       homeScore: update.homeScore,
       awayScore: update.awayScore,
-      status: 'FINISHED' as const,
+      status: update.status,
     };
   });
 

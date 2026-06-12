@@ -5,7 +5,7 @@
       ".indexOn": ["meta/ownerUid"],
       "$gameId": {
         ".read": true,
-        ".write": "auth != null && ( (!data.exists() && newData.child('meta/ownerUid').val() === auth.uid) || data.child('meta/ownerUid').val() === auth.uid )",
+        ".write": "auth != null && ( (!data.exists() && newData.child('meta/ownerUid').val() === auth.uid) || data.child('meta/ownerUid').val() === auth.uid || (newData.child('meta/claimSecret').val() === root.child('gameSecrets').child($gameId).val()) )",
         "meta": {
           "ownerUid": {
             ".validate": "newData.isString() && newData.val().length > 0"
@@ -18,8 +18,17 @@
           },
           "schemaVersion": {
             ".validate": "newData.isNumber()"
+          },
+          "claimSecret": {
+            ".validate": "newData.isString() || !newData.exists()"
           }
         }
+      }
+    },
+    "gameSecrets": {
+      "$gameId": {
+        ".read": "auth != null && root.child('games').child($gameId).child('meta/ownerUid').val() === auth.uid",
+        ".write": "auth != null && (!data.exists() || root.child('games').child($gameId).child('meta/ownerUid').val() === auth.uid || newData.val() === data.val())"
       }
     }
   }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Trash2, Plus, Shuffle, RotateCcw, X, Copy, Save, Download, Link2, List, ExternalLink } from 'lucide-react';
 import { CONTROLS, SURFACES, TEXT, getPlayerTheme } from '../utils/theme';
-import { getUserCloudGames, CloudGameRecord } from '../firebase/gameStore';
+import { getUserCloudGames, CloudGameRecord, getCloudGameSecret } from '../firebase/gameStore';
 import { ensureAnonymousAuth } from '../firebase/client';
 
 const BULK_PLAYERS_INPUT_KEY = 'worldCupBulkPlayersInput';
@@ -34,6 +34,7 @@ export const SetupTab: React.FC = () => {
   const [isDeletingLiveGame, setIsDeletingLiveGame] = useState(false);
   const [savedStates, setSavedStates] = useState<Record<string, any>>({});
   const [userGames, setUserGames] = useState<{ id: string; meta: CloudGameRecord['meta'] }[]>([]);
+  const [hostSecret, setHostSecret] = useState<string | null>(null);
   const [saveSlotName, setSaveSlotName] = useState("");
   const [liveMessage, setLiveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [bulkPlayersInput, setBulkPlayersInput] = useState(() => {
@@ -71,6 +72,16 @@ export const SetupTab: React.FC = () => {
   useEffect(() => {
     fetchUserGames();
   }, [cloudGameId]); // Refresh when a game is created or deleted
+
+  useEffect(() => {
+    if (cloudGameId && isCloudOwner) {
+      getCloudGameSecret(cloudGameId).then((secret) => {
+        setHostSecret(secret);
+      });
+    } else {
+      setHostSecret(null);
+    }
+  }, [cloudGameId, isCloudOwner]);
 
   const fetchUserGames = async () => {
     try {
@@ -249,6 +260,18 @@ export const SetupTab: React.FC = () => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const copyHostUrl = () => {
+    if (!cloudGameId || !hostSecret) return;
+    const url = getLiveGameUrl();
+    if (!url) return;
+    
+    // Add the secret to the hash part of the URL (after #game=xyz)
+    const hostUrl = `${url}&hostSecret=${hostSecret}`;
+    navigator.clipboard.writeText(hostUrl);
+    setLiveMessage({ type: 'success', text: 'Host URL copied! Open this on your other device to transfer edit rights.' });
+    setTimeout(() => setLiveMessage(null), 8000);
   };
 
   const handleCreateLiveGame = async () => {
@@ -535,13 +558,25 @@ export const SetupTab: React.FC = () => {
               <Link2 size={16} className="mr-2" /> {cloudStatus === 'connecting' ? 'Starting Live Game...' : 'Start Live Game & Copy Link'}
             </button>
           ) : (
-            <button
-              onClick={handleCopyLiveLink}
-              className="px-4 py-2 bg-sky-600 text-white rounded-lg font-bold text-sm hover:bg-sky-500 transition-colors shadow-sm inline-flex items-center justify-center disabled:opacity-70"
-              disabled={isDeletingLiveGame}
-            >
-              <Link2 size={16} className="mr-2" /> Copy Live Viewer URL
-            </button>
+            <>
+              <button
+                onClick={handleCopyLiveLink}
+                className="px-4 py-2 bg-sky-600 text-white rounded-lg font-bold text-sm hover:bg-sky-500 transition-colors shadow-sm inline-flex items-center justify-center disabled:opacity-70"
+                disabled={isDeletingLiveGame}
+              >
+                <Link2 size={16} className="mr-2" /> Copy Live Viewer URL
+              </button>
+              {isCloudOwner && hostSecret && (
+                <button
+                  onClick={copyHostUrl}
+                  className="px-4 py-2 bg-amber-600 text-white rounded-lg font-bold text-sm hover:bg-amber-500 transition-colors shadow-sm inline-flex items-center justify-center disabled:opacity-70"
+                  disabled={isDeletingLiveGame}
+                  title="Use this link on another device to take over host capabilities"
+                >
+                  <Copy size={16} className="mr-2" /> Copy Host Transfer Link
+                </button>
+              )}
+            </>
           )}
 
           {cloudGameId && isCloudOwner && (
