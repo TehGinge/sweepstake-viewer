@@ -132,11 +132,14 @@ const getStaticScoreFeedUrl = (tournamentId: TournamentId): string => {
     return configured;
   }
 
+  const baseUrl = ((import.meta.env.BASE_URL as string | undefined) || '/').trim();
+  const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+
   if (tournamentId === 'WC26') {
-    return '/score-feed/wc26.json';
+    return `${normalizedBaseUrl}score-feed/wc26.json`;
   }
 
-  return '/score-feed/wc26.json';
+  return `${normalizedBaseUrl}score-feed/wc26.json`;
 };
 
 const getMockUpdateLimit = (): number => {
