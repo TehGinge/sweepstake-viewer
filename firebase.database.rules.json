@@ -30,6 +30,31 @@
         ".read": "auth != null && root.child('games').child($gameId).child('meta/ownerUid').val() === auth.uid",
         ".write": "auth != null && (!data.exists() || root.child('games').child($gameId).child('meta/ownerUid').val() === auth.uid || newData.val() === data.val())"
       }
+    },
+    "scoreFeeds": {
+      "$tournamentId": {
+        "matches": {
+          "$matchId": {
+            ".read": true,
+            ".write": "auth != null",
+            "homeScore": {
+              ".validate": "newData.isNumber()"
+            },
+            "awayScore": {
+              ".validate": "newData.isNumber()"
+            },
+            "status": {
+              ".validate": "newData.isString() && (newData.val() === 'FINISHED' || newData.val() === 'LIVE')"
+            },
+            "source": {
+              ".validate": "newData.isString() && newData.val().length > 0"
+            },
+            "updatedAt": {
+              ".validate": "newData.isNumber()"
+            }
+          }
+        }
+      }
     }
   }
 }

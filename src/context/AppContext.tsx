@@ -5,7 +5,8 @@ import { TEAMS as WC26_TEAMS, GROUPS as WC26_GROUPS } from '../data/teams';
 // import { EURO28_TEAMS, EURO28_GROUPS, generateEuro28Matches } from '../data/euro28';
 import { CloudGameStatus, createCloudGame, deleteCloudGame, subscribeToCloudGame, updateCloudGameState, claimCloudGame, getCloudGameSecret } from '../firebase/gameStore';
 import { ensureAnonymousAuth, isFirebaseConfigured } from '../firebase/client';
-import { applyScoreUpdates, fetchTournamentScoreUpdates, getNextScoreSyncDelayMs } from '../services/scoreSync';
+import { ScoreUpdate, applyScoreUpdates, fetchTournamentScoreUpdates, getNextScoreSyncDelayMs } from '../services/scoreSync';
+import { publishCentralScoreUpdates, subscribeToCentralScoreFeed } from '../firebase/scoreFeedStore';
 
 const isValidTournamentId = (id: string): id is TournamentId => {
   return id === 'WC26';
@@ -238,6 +239,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
     teams,
     matches: matchesState,
   });
+  const latestCentralScoreUpdatesRef = useRef<Map<string, ScoreUpdate>>(new Map());
 
   const setMatches: React.Dispatch<React.SetStateAction<Match[]>> = (nextState) => {
     if (computedReadOnly) return;
@@ -315,6 +317,10 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
           appliedCount = applied.appliedCount;
           return applied.matches;
         });
+
+        if (cloudGameId && isCloudOwner) {
+          await publishCentralScoreUpdates(syncInputs.tournamentId, result.updates);
+        }
       }
 
       setScoreSyncStatus((prev) => ({
@@ -347,7 +353,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
     } finally {
       scoreSyncInFlightRef.current = false;
     }
-  }, [appendScoreSyncLog]);
+  }, [appendScoreSyncLog, cloudGameId, isCloudOwner]);
 
   const triggerScoreSync = useCallback(async () => {
     if (!isLoaded || computedReadOnly) {
@@ -369,6 +375,29 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
       matches: matchesState,
     };
   }, [tournamentId, teams, matchesState]);
+
+  useEffect(() => {
+    if (!cloudGameId || !isFirebaseConfigured()) {
+      latestCentralScoreUpdatesRef.current.clear();
+      return;
+    }
+
+    return subscribeToCentralScoreFeed(
+      tournamentId,
+      (updates) => {
+        latestCentralScoreUpdatesRef.current = new Map<string, ScoreUpdate>(
+          updates.map((update) => [update.matchId, update]),
+        );
+
+        if (updates.length === 0) return;
+
+        setMatchesState((prevMatches) => {
+          return applyScoreUpdates(prevMatches, updates).matches;
+        });
+      },
+      () => {},
+    );
+  }, [cloudGameId, tournamentId]);
 
   useEffect(() => {
     if (cloudGameId) {
@@ -482,13 +511,17 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
               matches: mergeMatchesWithTemplate(record.state.tournamentId, record.state.matches),
               settings: { ...DEFAULT_SETTINGS, ...record.state.settings },
             };
+            const centralScoreUpdates: ScoreUpdate[] = Array.from(latestCentralScoreUpdatesRef.current.values());
+            const nextMatches = centralScoreUpdates.length > 0
+              ? applyScoreUpdates(incomingState.matches, centralScoreUpdates).matches
+              : incomingState.matches;
 
             lastRemoteSignatureRef.current = JSON.stringify(incomingState);
             setCloudOwnerUid(record.meta.ownerUid);
 
             setTournamentIdState(incomingState.tournamentId);
             setPlayersState(incomingState.players);
-            setMatchesState(incomingState.matches);
+            setMatchesState(nextMatches);
             setConfig(incomingState.config);
             setSettings(incomingState.settings);
 
