@@ -141,6 +141,14 @@ const markScoreSyncRequest = (nowMs: number = Date.now()): void => {
 
 const AppContext = createContext<AppState | undefined>(undefined);
 
+const resolveIncomingMatchStatus = (match: Match): Match['status'] => {
+  if (match.status === 'LIVE' || match.status === 'FINISHED' || match.status === 'SCHEDULED') {
+    return match.status;
+  }
+
+  return match.homeScore !== null && match.awayScore !== null ? 'FINISHED' : 'SCHEDULED';
+};
+
 const mergeMatchesWithTemplate = (id: TournamentId, savedMatches?: Match[]): Match[] => {
   const defaultMatches = getDefaultMatches(id);
   if (!savedMatches) return defaultMatches;
@@ -153,7 +161,7 @@ const mergeMatchesWithTemplate = (id: TournamentId, savedMatches?: Match[]): Mat
       ...templateMatch,
       homeScore: incomingMatch.homeScore,
       awayScore: incomingMatch.awayScore,
-      status: (incomingMatch.homeScore !== null && incomingMatch.awayScore !== null ? 'FINISHED' : 'SCHEDULED') as 'FINISHED' | 'SCHEDULED',
+      status: resolveIncomingMatchStatus(incomingMatch),
       homeTeamId: templateMatch.stage === 'GROUP' ? templateMatch.homeTeamId : incomingMatch.homeTeamId,
       awayTeamId: templateMatch.stage === 'GROUP' ? templateMatch.awayTeamId : incomingMatch.awayTeamId,
     };
