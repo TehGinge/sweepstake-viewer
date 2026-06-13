@@ -32,10 +32,10 @@
       }
     },
     "scoreFeeds": {
+      ".read": true,
       "$tournamentId": {
         "matches": {
           "$matchId": {
-            ".read": true,
             ".write": "auth != null",
             "homeScore": {
               ".validate": "newData.isNumber()"
