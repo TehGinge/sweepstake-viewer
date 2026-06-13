@@ -326,7 +326,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
           return applied.matches;
         });
 
-        if (cloudGameId && isCloudOwner) {
+        if (cloudGameId) {
           await publishCentralScoreUpdates(syncInputs.tournamentId, result.updates);
         }
       }
