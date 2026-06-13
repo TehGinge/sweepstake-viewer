@@ -63,10 +63,6 @@ export const MatchesTab: React.FC = () => {
   };
 
   const getScoreSyncLabel = (): string => {
-    if (isReadOnly) {
-      return 'Auto-sync is handled by the host. Viewer updates arrive in real time.';
-    }
-
     if (scoreSyncStatus.state === 'syncing') {
       return 'Auto-sync is checking official scores...';
     }
@@ -84,7 +80,8 @@ export const MatchesTab: React.FC = () => {
       ? ` Applied ${scoreSyncStatus.lastAppliedCount} update${scoreSyncStatus.lastAppliedCount === 1 ? '' : 's'}.`
       : '';
 
-    return `Auto-sync checked at ${formatLastChecked(scoreSyncStatus.lastSyncedAt)}${sourceText}.${appliedText}`;
+    const viewerSuffix = isReadOnly ? ' Viewer mode can run Sync Now manually.' : '';
+    return `Auto-sync checked at ${formatLastChecked(scoreSyncStatus.lastSyncedAt)}${sourceText}.${appliedText}${viewerSuffix}`;
   };
 
   const manualSyncLogs = scoreSyncLogs.filter((entry) => entry.trigger === 'manual').slice(0, 8);
@@ -135,59 +132,55 @@ export const MatchesTab: React.FC = () => {
               <h2 className={`text-xl font-black ${TEXT.primary}`}>{STAGES.find(s => s.stage === activeStage)?.title}</h2>
               <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{getScoreSyncLabel()}</p>
             </div>
-            {!isReadOnly && (
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  void triggerScoreSync();
+                }}
+                disabled={scoreSyncStatus.state === 'syncing'}
+                className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/30 rounded hover:bg-sky-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {scoreSyncStatus.state === 'syncing' ? 'Syncing...' : 'Sync Now'}
+              </button>
+              {!isReadOnly && settings.allowSimulate && (
                 <button
-                  onClick={() => {
-                    void triggerScoreSync();
-                  }}
-                  disabled={scoreSyncStatus.state === 'syncing'}
-                  className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/30 rounded hover:bg-sky-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  onClick={simulateStageMatches}
+                  className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors"
                 >
-                  {scoreSyncStatus.state === 'syncing' ? 'Syncing...' : 'Sync Now'}
+                  Simulate Round
                 </button>
-                {settings.allowSimulate && (
-                  <button
-                    onClick={simulateStageMatches}
-                    className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors"
-                  >
-                    Simulate Round
-                  </button>
-                )}
+              )}
+            </div>
+          </div>
+
+          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400">Sync Now Logs</h3>
+              {manualSyncLogs.length > 0 && (
+                <button
+                  onClick={clearScoreSyncLogs}
+                  className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            {manualSyncLogs.length === 0 ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">No manual sync attempts yet.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {manualSyncLogs.map((log) => (
+                  <div key={log.id} className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-mono text-slate-500 dark:text-slate-400">{formatSyncLogTime(log.timestamp)}</span>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-black uppercase tracking-widest ${getLogBadgeClass(log.level)}`}>
+                      {log.level}
+                    </span>
+                    <span className="text-slate-700 dark:text-slate-200">{log.message}</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
-
-          {!isReadOnly && (
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40">
-              <div className="flex items-center justify-between gap-3 mb-2">
-                <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400">Sync Now Logs</h3>
-                {manualSyncLogs.length > 0 && (
-                  <button
-                    onClick={clearScoreSyncLogs}
-                    className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-              {manualSyncLogs.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">No manual sync attempts yet.</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {manualSyncLogs.map((log) => (
-                    <div key={log.id} className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-mono text-slate-500 dark:text-slate-400">{formatSyncLogTime(log.timestamp)}</span>
-                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-black uppercase tracking-widest ${getLogBadgeClass(log.level)}`}>
-                        {log.level}
-                      </span>
-                      <span className="text-slate-700 dark:text-slate-200">{log.message}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
           
           <div className="divide-y divide-slate-100 dark:divide-slate-700/50 px-6 py-2">
             {stageMatches.map((match) => {
@@ -318,7 +311,7 @@ export const MatchesTab: React.FC = () => {
             <h2 className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-2">Pro Tip</h2>
             <p className="text-sm text-slate-700 dark:text-slate-300 leading-tight">
               {isReadOnly
-                ? 'This live game link is read-only for viewers. Score updates appear automatically when the host edits matches.'
+                ? 'This live game link is read-only for viewers, but you can still run Sync Now to pull official API scores on demand.'
                 : 'Select the teams playing in each match. Any team that appears in a match automatically scores progression points for their assigned player. Auto-sync now checks official results and fills unfinished matches, while finished matches stay locked.'}
             </p>
         </div>

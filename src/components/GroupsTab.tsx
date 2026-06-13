@@ -107,66 +107,62 @@ export const GroupsTab: React.FC<{ initialGroup?: string | null; onGroupHandled?
               <h2 className={`text-xl font-black ${TEXT.primary}`}>Group {activeGroup} Standings</h2>
               <span className={`inline-flex items-center px-2.5 py-1 rounded text-sm font-semibold border bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600`}>Group {activeGroup}</span>
             </div>
-            {!isReadOnly && (
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  void triggerScoreSync();
+                }}
+                disabled={scoreSyncStatus.state === 'syncing'}
+                className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/30 rounded hover:bg-sky-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {scoreSyncStatus.state === 'syncing' ? 'Syncing...' : 'Sync Now'}
+              </button>
+              {!isReadOnly && settings.allowSimulate && (
+              <button
+                onClick={simulateActiveGroup}
+                className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors"
+              >
+                Simulate Group {activeGroup}
+              </button>
+              )}
+              {!isReadOnly && settings.allowSimulate && (
+              <button
+                onClick={simulateGroupMatches}
+                className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors"
+              >
+                Simulate All Groups
+              </button>
+              )}
+            </div>
+          </div>
+          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400">Sync Now Logs</h3>
+              {manualSyncLogs.length > 0 && (
                 <button
-                  onClick={() => {
-                    void triggerScoreSync();
-                  }}
-                  disabled={scoreSyncStatus.state === 'syncing'}
-                  className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/30 rounded hover:bg-sky-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  onClick={clearScoreSyncLogs}
+                  className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800"
                 >
-                  {scoreSyncStatus.state === 'syncing' ? 'Syncing...' : 'Sync Now'}
+                  Clear
                 </button>
-                {settings.allowSimulate && (
-                <button
-                  onClick={simulateActiveGroup}
-                  className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors"
-                >
-                  Simulate Group {activeGroup}
-                </button>
-                )}
-                {settings.allowSimulate && (
-                <button
-                  onClick={simulateGroupMatches}
-                  className="text-xs font-bold uppercase tracking-widest px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors"
-                >
-                  Simulate All Groups
-                </button>
-                )}
+              )}
+            </div>
+            {manualSyncLogs.length === 0 ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">No manual sync attempts yet.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {manualSyncLogs.map((log) => (
+                  <div key={log.id} className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-mono text-slate-500 dark:text-slate-400">{formatSyncLogTime(log.timestamp)}</span>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-black uppercase tracking-widest ${getLogBadgeClass(log.level)}`}>
+                      {log.level}
+                    </span>
+                    <span className="text-slate-700 dark:text-slate-200">{log.message}</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
-          {!isReadOnly && (
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40">
-              <div className="flex items-center justify-between gap-3 mb-2">
-                <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400">Sync Now Logs</h3>
-                {manualSyncLogs.length > 0 && (
-                  <button
-                    onClick={clearScoreSyncLogs}
-                    className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-              {manualSyncLogs.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">No manual sync attempts yet.</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {manualSyncLogs.map((log) => (
-                    <div key={log.id} className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-mono text-slate-500 dark:text-slate-400">{formatSyncLogTime(log.timestamp)}</span>
-                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-black uppercase tracking-widest ${getLogBadgeClass(log.level)}`}>
-                        {log.level}
-                      </span>
-                      <span className="text-slate-700 dark:text-slate-200">{log.message}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
           <div className="overflow-x-auto hide-scrollbar px-6 pb-6 pt-4">
             <table className="w-full text-left mt-2 text-sm">
               <thead className="text-xs uppercase text-slate-600 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-700">

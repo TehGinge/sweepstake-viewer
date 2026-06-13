@@ -364,17 +364,13 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
   }, [appendScoreSyncLog, cloudGameId, isCloudOwner]);
 
   const triggerScoreSync = useCallback(async () => {
-    if (!isLoaded || computedReadOnly) {
-      if (!isLoaded) {
-        appendScoreSyncLog('manual', 'warn', 'Manual sync skipped because the app is still loading.');
-      } else {
-        appendScoreSyncLog('manual', 'warn', 'Manual sync skipped in viewer mode.');
-      }
+    if (!isLoaded) {
+      appendScoreSyncLog('manual', 'warn', 'Manual sync skipped because the app is still loading.');
       return;
     }
 
     await executeScoreSync('manual');
-  }, [appendScoreSyncLog, computedReadOnly, executeScoreSync, isLoaded]);
+  }, [appendScoreSyncLog, executeScoreSync, isLoaded]);
 
   useEffect(() => {
     latestSyncInputsRef.current = {
