@@ -47,6 +47,14 @@ const normalizePlayers = (value: unknown): Player[] => {
     }));
 };
 
+const normalizeMatchStatus = (match: Record<string, unknown>): Match['status'] => {
+  if (match.status === 'LIVE' || match.status === 'FINISHED' || match.status === 'SCHEDULED') {
+    return match.status;
+  }
+
+  return match.homeScore !== null && match.awayScore !== null ? 'FINISHED' : 'SCHEDULED';
+};
+
 const normalizeMatches = (value: unknown): Match[] => {
   if (!Array.isArray(value)) return [];
 
@@ -60,7 +68,7 @@ const normalizeMatches = (value: unknown): Match[] => {
       awayTeamId: typeof match.awayTeamId === 'string' ? match.awayTeamId : null,
       homeScore: typeof match.homeScore === 'number' ? match.homeScore : null,
       awayScore: typeof match.awayScore === 'number' ? match.awayScore : null,
-      status: match.homeScore !== null && match.awayScore !== null ? 'FINISHED' : 'SCHEDULED',
+      status: normalizeMatchStatus(match),
       group: typeof match.group === 'string' ? match.group : undefined,
       date: typeof match.date === 'string' ? match.date : undefined,
       location: typeof match.location === 'string' ? match.location : undefined,
