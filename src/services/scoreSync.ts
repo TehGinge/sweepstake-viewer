@@ -16,6 +16,13 @@ const LIVE_PROVIDER_STATUSES = new Set([
   'PAUSED',
 ]);
 
+const SCHEDULED_PROVIDER_STATUSES = new Set([
+  'SCHEDULED',
+  'TIMED',
+]);
+
+const FIXTURE_SYNC_MAX_KICKOFF_DELTA_MS = 18 * 60 * 60 * 1000;
+
 const TEAM_CODE_ALIASES: Record<string, string> = {
   SAU: 'KSA',
   UKR: 'UKR',
@@ -54,6 +61,7 @@ type ScoreFeedMode = 'live' | 'mock' | 'static';
 
 type ProviderMatch = {
   kickoffUtc: string | null;
+  stage: string | null;
   homeCode: string | null;
   awayCode: string | null;
   homeName: string | null;
@@ -71,6 +79,12 @@ export interface ScoreUpdate {
   source: string;
 }
 
+export interface FixtureUpdate {
+  matchId: string;
+  homeTeamId: string;
+  awayTeamId: string;
+}
+
 export interface FetchScoreUpdatesParams {
   tournamentId: TournamentId;
   matches: Match[];
@@ -82,17 +96,24 @@ export type FetchScoreUpdatesResult =
       status: 'ok';
       source: string;
       fetchedAt: number;
+      fixtureUpdates: FixtureUpdate[];
       updates: ScoreUpdate[];
     }
   | {
       status: 'disabled';
       source: string;
       fetchedAt: number;
+      fixtureUpdates: [];
       updates: [];
       reason: string;
     };
 
 export interface ApplyScoreUpdatesResult {
+  matches: Match[];
+  appliedCount: number;
+}
+
+export interface ApplyFixtureUpdatesResult {
   matches: Match[];
   appliedCount: number;
 }
@@ -109,6 +130,11 @@ const parseDateMs = (value?: string): number | null => {
 
 const isUnfinishedMatch = (match: Match): boolean => {
   return !(match.homeScore !== null && match.awayScore !== null && match.status === 'FINISHED');
+};
+
+const isKnockoutProviderMatch = (providerMatch: ProviderMatch): boolean => {
+  if (!providerMatch.stage) return true;
+  return !providerMatch.stage.toUpperCase().includes('GROUP');
 };
 
 const getCompetitionCode = (tournamentId: TournamentId): string => {
@@ -265,6 +291,7 @@ const toProviderMatches = (payload: any): ProviderMatch[] => {
 
   return payload.matches.map((match: any) => ({
     kickoffUtc: typeof match?.utcDate === 'string' ? match.utcDate : null,
+    stage: typeof match?.stage === 'string' ? match.stage : null,
     homeCode: typeof match?.homeTeam?.tla === 'string' ? match.homeTeam.tla : null,
     awayCode: typeof match?.awayTeam?.tla === 'string' ? match.awayTeam.tla : null,
     homeName: typeof match?.homeTeam?.name === 'string'
@@ -283,13 +310,7 @@ const toProviderMatches = (payload: any): ProviderMatch[] => {
   }));
 };
 
-const deriveScoreUpdates = (providerMatches: ProviderMatch[], matches: Match[], teams: Team[]): ScoreUpdate[] => {
-  const updates: ScoreUpdate[] = [];
-
-  const pendingMatches = matches.filter(
-    (match) => Boolean(match.homeTeamId && match.awayTeamId),
-  );
-
+const createTeamLookup = (teams: Team[]): { teamByCode: Map<string, string>; teamByName: Map<string, string> } => {
   const teamByCode = new Map<string, string>();
   const teamByName = new Map<string, string>();
 
@@ -297,6 +318,80 @@ const deriveScoreUpdates = (providerMatches: ProviderMatch[], matches: Match[], 
     teamByCode.set(team.id.toUpperCase(), team.id);
     teamByName.set(normalizeText(team.name), team.id);
   }
+
+  return { teamByCode, teamByName };
+};
+
+const deriveFixtureUpdates = (providerMatches: ProviderMatch[], matches: Match[], teams: Team[]): FixtureUpdate[] => {
+  const fixtureUpdates: FixtureUpdate[] = [];
+  const { teamByCode, teamByName } = createTeamLookup(teams);
+
+  const pendingKnockoutMatches = matches
+    .filter((match) => match.stage !== 'GROUP' && isUnfinishedMatch(match))
+    .map((match) => ({ match, kickoffMs: parseDateMs(match.date) }))
+    .filter((entry): entry is { match: Match; kickoffMs: number } => entry.kickoffMs !== null);
+
+  const consumedMatchIds = new Set<string>();
+
+  for (const providerMatch of providerMatches) {
+    if (!providerMatch.status) continue;
+    if (!isKnockoutProviderMatch(providerMatch)) continue;
+    if (
+      !SCHEDULED_PROVIDER_STATUSES.has(providerMatch.status) &&
+      !LIVE_PROVIDER_STATUSES.has(providerMatch.status) &&
+      !FINISHED_PROVIDER_STATUSES.has(providerMatch.status)
+    ) {
+      continue;
+    }
+
+    const kickoffMs = parseDateMs(providerMatch.kickoffUtc || undefined);
+    if (kickoffMs === null) continue;
+
+    const homeTeamId = resolveTeamId(providerMatch.homeCode, providerMatch.homeName, teamByCode, teamByName);
+    const awayTeamId = resolveTeamId(providerMatch.awayCode, providerMatch.awayName, teamByCode, teamByName);
+    if (!homeTeamId || !awayTeamId) continue;
+
+    let bestMatch: Match | null = null;
+    let bestDeltaMs = Number.POSITIVE_INFINITY;
+
+    for (const candidate of pendingKnockoutMatches) {
+      if (consumedMatchIds.has(candidate.match.id)) continue;
+
+      const deltaMs = Math.abs(candidate.kickoffMs - kickoffMs);
+      if (deltaMs > FIXTURE_SYNC_MAX_KICKOFF_DELTA_MS) continue;
+
+      if (deltaMs < bestDeltaMs) {
+        bestDeltaMs = deltaMs;
+        bestMatch = candidate.match;
+      }
+    }
+
+    if (!bestMatch) continue;
+
+    consumedMatchIds.add(bestMatch.id);
+
+    if (bestMatch.homeTeamId === homeTeamId && bestMatch.awayTeamId === awayTeamId) {
+      continue;
+    }
+
+    fixtureUpdates.push({
+      matchId: bestMatch.id,
+      homeTeamId,
+      awayTeamId,
+    });
+  }
+
+  return fixtureUpdates;
+};
+
+const deriveScoreUpdates = (providerMatches: ProviderMatch[], matches: Match[], teams: Team[]): ScoreUpdate[] => {
+  const updates: ScoreUpdate[] = [];
+
+  const pendingMatches = matches.filter(
+    (match) => Boolean(match.homeTeamId && match.awayTeamId),
+  );
+
+  const { teamByCode, teamByName } = createTeamLookup(teams);
 
   const pendingByPair = new Map<string, Match[]>();
 
@@ -393,6 +488,7 @@ export const fetchTournamentScoreUpdates = async ({
       status: 'ok',
       source: MOCK_SOURCE_NAME,
       fetchedAt,
+      fixtureUpdates: [],
       updates: deriveMockScoreUpdates(matches),
     };
   }
@@ -407,12 +503,15 @@ export const fetchTournamentScoreUpdates = async ({
 
     const payload = await response.json();
     const providerMatches = toProviderMatches(payload);
-    const updates = deriveScoreUpdates(providerMatches, matches, teams);
+    const fixtureUpdates = deriveFixtureUpdates(providerMatches, matches, teams);
+    const fixtureApplied = applyFixtureUpdates(matches, fixtureUpdates);
+    const updates = deriveScoreUpdates(providerMatches, fixtureApplied.matches, teams);
 
     return {
       status: 'ok',
       source: STATIC_SOURCE_NAME,
       fetchedAt,
+      fixtureUpdates,
       updates,
     };
   }
@@ -424,6 +523,7 @@ export const fetchTournamentScoreUpdates = async ({
       status: 'disabled',
       source: LIVE_SOURCE_NAME,
       fetchedAt,
+      fixtureUpdates: [],
       updates: [],
       reason: 'Automatic score sync is disabled. Set VITE_FOOTBALL_DATA_API_TOKEN in your .env file.',
     };
@@ -470,13 +570,57 @@ export const fetchTournamentScoreUpdates = async ({
 
   const payload = await response.json();
   const providerMatches = toProviderMatches(payload);
-  const updates = deriveScoreUpdates(providerMatches, matches, teams);
+  const fixtureUpdates = deriveFixtureUpdates(providerMatches, matches, teams);
+  const fixtureApplied = applyFixtureUpdates(matches, fixtureUpdates);
+  const updates = deriveScoreUpdates(providerMatches, fixtureApplied.matches, teams);
 
   return {
     status: 'ok',
     source: LIVE_SOURCE_NAME,
     fetchedAt,
+    fixtureUpdates,
     updates,
+  };
+};
+
+export const applyFixtureUpdates = (matches: Match[], updates: FixtureUpdate[]): ApplyFixtureUpdatesResult => {
+  if (updates.length === 0) {
+    return { matches, appliedCount: 0 };
+  }
+
+  const updatesByMatchId = new Map<string, FixtureUpdate>();
+  for (const update of updates) {
+    updatesByMatchId.set(update.matchId, update);
+  }
+
+  let appliedCount = 0;
+  let hasAnyChange = false;
+
+  const nextMatches = matches.map((match) => {
+    const update = updatesByMatchId.get(match.id);
+    if (!update) return match;
+
+    if (match.homeTeamId === update.homeTeamId && match.awayTeamId === update.awayTeamId) {
+      return match;
+    }
+
+    hasAnyChange = true;
+    appliedCount += 1;
+
+    return {
+      ...match,
+      homeTeamId: update.homeTeamId,
+      awayTeamId: update.awayTeamId,
+    };
+  });
+
+  if (!hasAnyChange) {
+    return { matches, appliedCount: 0 };
+  }
+
+  return {
+    matches: nextMatches,
+    appliedCount,
   };
 };
 
