@@ -5,7 +5,7 @@ import { TEAMS as WC26_TEAMS, GROUPS as WC26_GROUPS } from '../data/teams';
 // import { EURO28_TEAMS, EURO28_GROUPS, generateEuro28Matches } from '../data/euro28';
 import { CloudGameStatus, createCloudGame, deleteCloudGame, subscribeToCloudGame, updateCloudGameState, claimCloudGame, getCloudGameSecret } from '../firebase/gameStore';
 import { ensureAnonymousAuth, isFirebaseConfigured } from '../firebase/client';
-import { ScoreUpdate, applyScoreUpdates, fetchTournamentScoreUpdates, getNextScoreSyncDelayMs } from '../services/scoreSync';
+import { ScoreUpdate, applyFixtureUpdates, applyScoreUpdates, fetchTournamentScoreUpdates, getNextScoreSyncDelayMs } from '../services/scoreSync';
 import { publishCentralScoreUpdates, subscribeToCentralScoreFeed } from '../firebase/scoreFeedStore';
 
 const isValidTournamentId = (id: string): id is TournamentId => {
@@ -318,17 +318,20 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
       }
 
       let appliedCount = 0;
+      let fixtureAppliedCount = 0;
 
-      if (result.updates.length > 0) {
+      if (result.fixtureUpdates.length > 0 || result.updates.length > 0) {
         setMatchesState((prevMatches) => {
-          const applied = applyScoreUpdates(prevMatches, result.updates);
-          appliedCount = applied.appliedCount;
-          return applied.matches;
+          const fixtureApplied = applyFixtureUpdates(prevMatches, result.fixtureUpdates);
+          fixtureAppliedCount = fixtureApplied.appliedCount;
+          const scoreApplied = applyScoreUpdates(fixtureApplied.matches, result.updates);
+          appliedCount = scoreApplied.appliedCount;
+          return scoreApplied.matches;
         });
+      }
 
-        if (cloudGameId) {
-          await publishCentralScoreUpdates(syncInputs.tournamentId, result.updates);
-        }
+      if (result.updates.length > 0 && cloudGameId) {
+        await publishCentralScoreUpdates(syncInputs.tournamentId, result.updates);
       }
 
       setScoreSyncStatus((prev) => ({
@@ -336,7 +339,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
         state: 'idle',
         source: result.source,
         lastSyncedAt: result.fetchedAt,
-        lastAppliedCount: appliedCount,
+        lastAppliedCount: appliedCount + fixtureAppliedCount,
         lastError: null,
       }));
 
@@ -344,7 +347,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
         appendScoreSyncLog(
           trigger,
           'success',
-          `Manual sync complete via ${result.source}. Provider updates: ${result.updates.length}, applied: ${appliedCount}.`,
+          `Manual sync complete via ${result.source}. Fixture alignments: ${fixtureAppliedCount}, provider updates: ${result.updates.length}, score updates applied: ${appliedCount}.`,
         );
       }
     } catch (error: any) {
