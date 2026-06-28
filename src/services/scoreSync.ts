@@ -60,6 +60,7 @@ const DEV_PROXY_BASE_URL = '/api/football-data';
 type ScoreFeedMode = 'live' | 'mock' | 'static';
 
 type ProviderMatch = {
+  id: string | null;
   kickoffUtc: string | null;
   stage: string | null;
   homeCode: string | null;
@@ -81,8 +82,9 @@ export interface ScoreUpdate {
 
 export interface FixtureUpdate {
   matchId: string;
-  homeTeamId: string;
-  awayTeamId: string;
+  providerMatchId?: string;
+  homeTeamId: string | null;
+  awayTeamId: string | null;
 }
 
 export interface FetchScoreUpdatesParams {
@@ -135,6 +137,22 @@ const isUnfinishedMatch = (match: Match): boolean => {
 const isKnockoutProviderMatch = (providerMatch: ProviderMatch): boolean => {
   if (!providerMatch.stage) return true;
   return !providerMatch.stage.toUpperCase().includes('GROUP');
+};
+
+const PROVIDER_STAGE_TO_LOCAL: Record<string, Match['stage']> = {
+  LAST_32: 'R32',
+  ROUND_OF_32: 'R32',
+  LAST_16: 'R16',
+  ROUND_OF_16: 'R16',
+  QUARTER_FINALS: 'QF',
+  SEMI_FINALS: 'SF',
+  THIRD_PLACE: '3RD',
+  FINAL: 'FINAL',
+};
+
+const mapProviderStageToLocal = (stage: string | null): Match['stage'] | null => {
+  if (!stage) return null;
+  return PROVIDER_STAGE_TO_LOCAL[stage.toUpperCase()] ?? null;
 };
 
 const getCompetitionCode = (tournamentId: TournamentId): string => {
@@ -290,6 +308,7 @@ const toProviderMatches = (payload: any): ProviderMatch[] => {
   }
 
   return payload.matches.map((match: any) => ({
+    id: match?.id != null ? String(match.id) : null,
     kickoffUtc: typeof match?.utcDate === 'string' ? match.utcDate : null,
     stage: typeof match?.stage === 'string' ? match.stage : null,
     homeCode: typeof match?.homeTeam?.tla === 'string' ? match.homeTeam.tla : null,
@@ -331,6 +350,13 @@ const deriveFixtureUpdates = (providerMatches: ProviderMatch[], matches: Match[]
     .map((match) => ({ match, kickoffMs: parseDateMs(match.date) }))
     .filter((entry): entry is { match: Match; kickoffMs: number } => entry.kickoffMs !== null);
 
+  const pendingByProviderMatchId = new Map<string, Match>();
+  for (const entry of pendingKnockoutMatches) {
+    if (entry.match.providerMatchId) {
+      pendingByProviderMatchId.set(entry.match.providerMatchId, entry.match);
+    }
+  }
+
   const consumedMatchIds = new Set<string>();
 
   for (const providerMatch of providerMatches) {
@@ -349,12 +375,25 @@ const deriveFixtureUpdates = (providerMatches: ProviderMatch[], matches: Match[]
 
     const homeTeamId = resolveTeamId(providerMatch.homeCode, providerMatch.homeName, teamByCode, teamByName);
     const awayTeamId = resolveTeamId(providerMatch.awayCode, providerMatch.awayName, teamByCode, teamByName);
-    if (!homeTeamId || !awayTeamId) continue;
+    const shouldClearUnresolvedTeams = SCHEDULED_PROVIDER_STATUSES.has(providerMatch.status);
+    const providerStage = mapProviderStageToLocal(providerMatch.stage);
 
     let bestMatch: Match | null = null;
     let bestDeltaMs = Number.POSITIVE_INFINITY;
 
-    for (const candidate of pendingKnockoutMatches) {
+    if (providerMatch.id) {
+      const mapped = pendingByProviderMatchId.get(providerMatch.id);
+      if (mapped && !consumedMatchIds.has(mapped.id)) {
+        bestMatch = mapped;
+      }
+    }
+
+    const candidates = providerStage
+      ? pendingKnockoutMatches.filter((candidate) => candidate.match.stage === providerStage)
+      : pendingKnockoutMatches;
+
+    for (const candidate of candidates) {
+      if (bestMatch) break;
       if (consumedMatchIds.has(candidate.match.id)) continue;
 
       const deltaMs = Math.abs(candidate.kickoffMs - kickoffMs);
@@ -370,14 +409,23 @@ const deriveFixtureUpdates = (providerMatches: ProviderMatch[], matches: Match[]
 
     consumedMatchIds.add(bestMatch.id);
 
-    if (bestMatch.homeTeamId === homeTeamId && bestMatch.awayTeamId === awayTeamId) {
+    const nextHomeTeamId = homeTeamId ?? (shouldClearUnresolvedTeams ? null : bestMatch.homeTeamId);
+    const nextAwayTeamId = awayTeamId ?? (shouldClearUnresolvedTeams ? null : bestMatch.awayTeamId);
+    const nextProviderMatchId = providerMatch.id ?? bestMatch.providerMatchId;
+
+    if (
+      bestMatch.homeTeamId === nextHomeTeamId &&
+      bestMatch.awayTeamId === nextAwayTeamId &&
+      bestMatch.providerMatchId === nextProviderMatchId
+    ) {
       continue;
     }
 
     fixtureUpdates.push({
       matchId: bestMatch.id,
-      homeTeamId,
-      awayTeamId,
+      providerMatchId: nextProviderMatchId,
+      homeTeamId: nextHomeTeamId,
+      awayTeamId: nextAwayTeamId,
     });
   }
 
@@ -600,7 +648,11 @@ export const applyFixtureUpdates = (matches: Match[], updates: FixtureUpdate[]):
     const update = updatesByMatchId.get(match.id);
     if (!update) return match;
 
-    if (match.homeTeamId === update.homeTeamId && match.awayTeamId === update.awayTeamId) {
+    if (
+      match.homeTeamId === update.homeTeamId &&
+      match.awayTeamId === update.awayTeamId &&
+      match.providerMatchId === update.providerMatchId
+    ) {
       return match;
     }
 
@@ -609,6 +661,7 @@ export const applyFixtureUpdates = (matches: Match[], updates: FixtureUpdate[]):
 
     return {
       ...match,
+      providerMatchId: update.providerMatchId,
       homeTeamId: update.homeTeamId,
       awayTeamId: update.awayTeamId,
     };

@@ -64,6 +64,7 @@ const normalizeMatches = (value: unknown): Match[] => {
     .map((match) => ({
       id: match.id as string,
       stage: match.stage as Match['stage'],
+      providerMatchId: typeof match.providerMatchId === 'string' ? match.providerMatchId : undefined,
       homeTeamId: typeof match.homeTeamId === 'string' ? match.homeTeamId : null,
       awayTeamId: typeof match.awayTeamId === 'string' ? match.awayTeamId : null,
       homeScore: typeof match.homeScore === 'number' ? match.homeScore : null,

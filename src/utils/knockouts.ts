@@ -83,6 +83,10 @@ export function autoPopulateKnockouts(matches: Match[], teams: Team[]): Match[] 
 
   for (let i = 0; i < nextMatches.length; i++) {
      const m = nextMatches[i];
+     const isApiAlignedFixture = m.stage !== 'GROUP' && Boolean(m.providerMatchId);
+     if (isApiAlignedFixture) {
+        continue;
+     }
      // handle 1st
      if (m.placeholderHome?.match(/^1[A-Z]$/)) {
         nextMatches[i].homeTeamId = firsts[m.placeholderHome[1]] ?? null;

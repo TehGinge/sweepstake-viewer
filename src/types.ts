@@ -15,6 +15,7 @@ export type MatchStatus = 'SCHEDULED' | 'LIVE' | 'FINISHED';
 export interface Match {
   id: string;
   stage: MatchStage;
+  providerMatchId?: string;
   homeTeamId: string | null;
   awayTeamId: string | null;
   homeScore: number | null;
