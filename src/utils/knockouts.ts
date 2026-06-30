@@ -104,6 +104,7 @@ export function autoPopulateKnockouts(matches: Match[], teams: Team[]): Match[] 
 
      // handle 3rd
      if (m.placeholderHome?.startsWith('3')) {
+        nextMatches[i].homeTeamId = null;
         thirdRequirements.push({
             mIdx: i,
             isHome: true,
@@ -111,6 +112,7 @@ export function autoPopulateKnockouts(matches: Match[], teams: Team[]): Match[] 
         });
      }
      if (m.placeholderAway?.startsWith('3')) {
+        nextMatches[i].awayTeamId = null;
         thirdRequirements.push({
             mIdx: i,
             isHome: false,
@@ -148,21 +150,7 @@ export function autoPopulateKnockouts(matches: Match[], teams: Team[]): Match[] 
   }
 
   if (thirdRequirements.length > 0) {
-      const success = assignThirds(thirdRequirements, 0, new Map());
-      if (!success) {
-          // Fallback: assign remaining sequentially if backtracking fails
-          const used = new Set<string>();
-          for (const req of thirdRequirements) {
-              const m = nextMatches[req.mIdx];
-              const advanceGroup = advancingThirdsGroups.find(g => !used.has(g));
-              if (advanceGroup) {
-                  used.add(advanceGroup);
-                  const teamId = finalThirdsAdvance.find(t => t.groupId === advanceGroup)?.teamId ?? null;
-                  if (req.isHome) m.homeTeamId = teamId;
-                  else m.awayTeamId = teamId;
-              }
-          }
-      }
+      assignThirds(thirdRequirements, 0, new Map());
   }
 
   return nextMatches;

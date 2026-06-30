@@ -162,6 +162,7 @@ const mergeMatchesWithTemplate = (id: TournamentId, savedMatches?: Match[]): Mat
       homeScore: incomingMatch.homeScore,
       awayScore: incomingMatch.awayScore,
       status: resolveIncomingMatchStatus(incomingMatch),
+      providerMatchId: templateMatch.stage === 'GROUP' ? templateMatch.providerMatchId : incomingMatch.providerMatchId,
       homeTeamId: templateMatch.stage === 'GROUP' ? templateMatch.homeTeamId : incomingMatch.homeTeamId,
       awayTeamId: templateMatch.stage === 'GROUP' ? templateMatch.awayTeamId : incomingMatch.awayTeamId,
     };
@@ -344,10 +345,23 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, cloudGameId 
       }));
 
       if (trigger === 'manual') {
+        const fixtureDiagnostics = result.fixtureSyncDiagnostics;
+        if (
+          fixtureDiagnostics.skippedNoCandidate > 0 ||
+          fixtureDiagnostics.skippedAmbiguous > 0 ||
+          fixtureDiagnostics.realignedPlayedFixtures > 0
+        ) {
+          appendScoreSyncLog(
+            trigger,
+            'warn',
+            `Fixture diagnostics: ${fixtureDiagnostics.skippedNoCandidate} no-candidate, ${fixtureDiagnostics.skippedAmbiguous} ambiguous, ${fixtureDiagnostics.realignedPlayedFixtures} played-fixture realignments.`,
+          );
+        }
+
         appendScoreSyncLog(
           trigger,
           'success',
-          `Manual sync complete via ${result.source}. Fixture alignments: ${fixtureAppliedCount}, provider updates: ${result.updates.length}, score updates applied: ${appliedCount}.`,
+          `Manual sync complete via ${result.source}. Fixture alignments applied: ${fixtureAppliedCount} (id: ${fixtureDiagnostics.alignedByProviderId}, kickoff: ${fixtureDiagnostics.alignedByKickoff}), fixture skips: ${fixtureDiagnostics.skippedNoCandidate} no-candidate / ${fixtureDiagnostics.skippedAmbiguous} ambiguous, teams cleared to TBD: ${fixtureDiagnostics.clearedTeamsToTbd}, played-fixture realignments: ${fixtureDiagnostics.realignedPlayedFixtures}, provider updates: ${result.updates.length}, score updates applied: ${appliedCount}.`,
         );
       }
     } catch (error: any) {

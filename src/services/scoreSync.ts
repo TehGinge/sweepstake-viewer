@@ -22,6 +22,7 @@ const SCHEDULED_PROVIDER_STATUSES = new Set([
 ]);
 
 const FIXTURE_SYNC_MAX_KICKOFF_DELTA_MS = 18 * 60 * 60 * 1000;
+const FIXTURE_SYNC_AMBIGUITY_MARGIN_MS = 90 * 60 * 1000;
 
 const TEAM_CODE_ALIASES: Record<string, string> = {
   SAU: 'KSA',
@@ -93,12 +94,31 @@ export interface FetchScoreUpdatesParams {
   teams: Team[];
 }
 
+export interface FixtureSyncDiagnostics {
+  alignedByProviderId: number;
+  alignedByKickoff: number;
+  skippedNoCandidate: number;
+  skippedAmbiguous: number;
+  clearedTeamsToTbd: number;
+  realignedPlayedFixtures: number;
+}
+
+const EMPTY_FIXTURE_SYNC_DIAGNOSTICS: FixtureSyncDiagnostics = {
+  alignedByProviderId: 0,
+  alignedByKickoff: 0,
+  skippedNoCandidate: 0,
+  skippedAmbiguous: 0,
+  clearedTeamsToTbd: 0,
+  realignedPlayedFixtures: 0,
+};
+
 export type FetchScoreUpdatesResult =
   | {
       status: 'ok';
       source: string;
       fetchedAt: number;
       fixtureUpdates: FixtureUpdate[];
+      fixtureSyncDiagnostics: FixtureSyncDiagnostics;
       updates: ScoreUpdate[];
     }
   | {
@@ -106,6 +126,7 @@ export type FetchScoreUpdatesResult =
       source: string;
       fetchedAt: number;
       fixtureUpdates: [];
+      fixtureSyncDiagnostics: FixtureSyncDiagnostics;
       updates: [];
       reason: string;
     };
@@ -341,12 +362,18 @@ const createTeamLookup = (teams: Team[]): { teamByCode: Map<string, string>; tea
   return { teamByCode, teamByName };
 };
 
-const deriveFixtureUpdates = (providerMatches: ProviderMatch[], matches: Match[], teams: Team[]): FixtureUpdate[] => {
+interface DeriveFixtureUpdatesResult {
+  updates: FixtureUpdate[];
+  diagnostics: FixtureSyncDiagnostics;
+}
+
+const deriveFixtureUpdates = (providerMatches: ProviderMatch[], matches: Match[], teams: Team[]): DeriveFixtureUpdatesResult => {
   const fixtureUpdates: FixtureUpdate[] = [];
+  const diagnostics: FixtureSyncDiagnostics = { ...EMPTY_FIXTURE_SYNC_DIAGNOSTICS };
   const { teamByCode, teamByName } = createTeamLookup(teams);
 
   const pendingKnockoutMatches = matches
-    .filter((match) => match.stage !== 'GROUP' && isUnfinishedMatch(match))
+    .filter((match) => match.stage !== 'GROUP')
     .map((match) => ({ match, kickoffMs: parseDateMs(match.date) }))
     .filter((entry): entry is { match: Match; kickoffMs: number } => entry.kickoffMs !== null);
 
@@ -379,30 +406,40 @@ const deriveFixtureUpdates = (providerMatches: ProviderMatch[], matches: Match[]
     const providerStage = mapProviderStageToLocal(providerMatch.stage);
 
     let bestMatch: Match | null = null;
-    let bestDeltaMs = Number.POSITIVE_INFINITY;
+    let alignedBy: 'provider-id' | 'kickoff' | null = null;
 
     if (providerMatch.id) {
       const mapped = pendingByProviderMatchId.get(providerMatch.id);
       if (mapped && !consumedMatchIds.has(mapped.id)) {
         bestMatch = mapped;
+        alignedBy = 'provider-id';
       }
     }
 
-    const candidates = providerStage
-      ? pendingKnockoutMatches.filter((candidate) => candidate.match.stage === providerStage)
-      : pendingKnockoutMatches;
+    if (!bestMatch) {
+      const candidates = (providerStage
+        ? pendingKnockoutMatches.filter((candidate) => candidate.match.stage === providerStage)
+        : pendingKnockoutMatches)
+        .filter((candidate) => !consumedMatchIds.has(candidate.match.id))
+        .map((candidate) => ({
+          match: candidate.match,
+          deltaMs: Math.abs(candidate.kickoffMs - kickoffMs),
+        }))
+        .filter((candidate) => candidate.deltaMs <= FIXTURE_SYNC_MAX_KICKOFF_DELTA_MS)
+        .sort((a, b) => a.deltaMs - b.deltaMs);
 
-    for (const candidate of candidates) {
-      if (bestMatch) break;
-      if (consumedMatchIds.has(candidate.match.id)) continue;
-
-      const deltaMs = Math.abs(candidate.kickoffMs - kickoffMs);
-      if (deltaMs > FIXTURE_SYNC_MAX_KICKOFF_DELTA_MS) continue;
-
-      if (deltaMs < bestDeltaMs) {
-        bestDeltaMs = deltaMs;
-        bestMatch = candidate.match;
+      if (candidates.length === 0) {
+        diagnostics.skippedNoCandidate += 1;
+        continue;
       }
+
+      if (candidates.length > 1 && candidates[1].deltaMs - candidates[0].deltaMs <= FIXTURE_SYNC_AMBIGUITY_MARGIN_MS) {
+        diagnostics.skippedAmbiguous += 1;
+        continue;
+      }
+
+      bestMatch = candidates[0].match;
+      alignedBy = 'kickoff';
     }
 
     if (!bestMatch) continue;
@@ -413,6 +450,15 @@ const deriveFixtureUpdates = (providerMatches: ProviderMatch[], matches: Match[]
     const nextAwayTeamId = awayTeamId ?? (shouldClearUnresolvedTeams ? null : bestMatch.awayTeamId);
     const nextProviderMatchId = providerMatch.id ?? bestMatch.providerMatchId;
 
+    if (shouldClearUnresolvedTeams) {
+      if (homeTeamId === null && bestMatch.homeTeamId !== null) {
+        diagnostics.clearedTeamsToTbd += 1;
+      }
+      if (awayTeamId === null && bestMatch.awayTeamId !== null) {
+        diagnostics.clearedTeamsToTbd += 1;
+      }
+    }
+
     if (
       bestMatch.homeTeamId === nextHomeTeamId &&
       bestMatch.awayTeamId === nextAwayTeamId &&
@@ -421,15 +467,27 @@ const deriveFixtureUpdates = (providerMatches: ProviderMatch[], matches: Match[]
       continue;
     }
 
+    const isPlayedMatch = bestMatch.homeScore !== null && bestMatch.awayScore !== null;
+    const changesTeams = bestMatch.homeTeamId !== nextHomeTeamId || bestMatch.awayTeamId !== nextAwayTeamId;
+    if (isPlayedMatch && changesTeams) {
+      diagnostics.realignedPlayedFixtures += 1;
+    }
+
     fixtureUpdates.push({
       matchId: bestMatch.id,
       providerMatchId: nextProviderMatchId,
       homeTeamId: nextHomeTeamId,
       awayTeamId: nextAwayTeamId,
     });
+
+    if (alignedBy === 'provider-id') {
+      diagnostics.alignedByProviderId += 1;
+    } else if (alignedBy === 'kickoff') {
+      diagnostics.alignedByKickoff += 1;
+    }
   }
 
-  return fixtureUpdates;
+  return { updates: fixtureUpdates, diagnostics };
 };
 
 const deriveScoreUpdates = (providerMatches: ProviderMatch[], matches: Match[], teams: Team[]): ScoreUpdate[] => {
@@ -537,6 +595,7 @@ export const fetchTournamentScoreUpdates = async ({
       source: MOCK_SOURCE_NAME,
       fetchedAt,
       fixtureUpdates: [],
+      fixtureSyncDiagnostics: { ...EMPTY_FIXTURE_SYNC_DIAGNOSTICS },
       updates: deriveMockScoreUpdates(matches),
     };
   }
@@ -551,7 +610,8 @@ export const fetchTournamentScoreUpdates = async ({
 
     const payload = await response.json();
     const providerMatches = toProviderMatches(payload);
-    const fixtureUpdates = deriveFixtureUpdates(providerMatches, matches, teams);
+    const fixtureDerivation = deriveFixtureUpdates(providerMatches, matches, teams);
+    const fixtureUpdates = fixtureDerivation.updates;
     const fixtureApplied = applyFixtureUpdates(matches, fixtureUpdates);
     const updates = deriveScoreUpdates(providerMatches, fixtureApplied.matches, teams);
 
@@ -560,6 +620,7 @@ export const fetchTournamentScoreUpdates = async ({
       source: STATIC_SOURCE_NAME,
       fetchedAt,
       fixtureUpdates,
+      fixtureSyncDiagnostics: fixtureDerivation.diagnostics,
       updates,
     };
   }
@@ -572,6 +633,7 @@ export const fetchTournamentScoreUpdates = async ({
       source: LIVE_SOURCE_NAME,
       fetchedAt,
       fixtureUpdates: [],
+      fixtureSyncDiagnostics: { ...EMPTY_FIXTURE_SYNC_DIAGNOSTICS },
       updates: [],
       reason: 'Automatic score sync is disabled. Set VITE_FOOTBALL_DATA_API_TOKEN in your .env file.',
     };
@@ -618,7 +680,8 @@ export const fetchTournamentScoreUpdates = async ({
 
   const payload = await response.json();
   const providerMatches = toProviderMatches(payload);
-  const fixtureUpdates = deriveFixtureUpdates(providerMatches, matches, teams);
+  const fixtureDerivation = deriveFixtureUpdates(providerMatches, matches, teams);
+  const fixtureUpdates = fixtureDerivation.updates;
   const fixtureApplied = applyFixtureUpdates(matches, fixtureUpdates);
   const updates = deriveScoreUpdates(providerMatches, fixtureApplied.matches, teams);
 
@@ -627,6 +690,7 @@ export const fetchTournamentScoreUpdates = async ({
     source: LIVE_SOURCE_NAME,
     fetchedAt,
     fixtureUpdates,
+    fixtureSyncDiagnostics: fixtureDerivation.diagnostics,
     updates,
   };
 };
