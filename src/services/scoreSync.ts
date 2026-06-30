@@ -723,12 +723,19 @@ export const applyFixtureUpdates = (matches: Match[], updates: FixtureUpdate[]):
     hasAnyChange = true;
     appliedCount += 1;
 
-    return {
+    const nextMatch: Match = {
       ...match,
-      providerMatchId: update.providerMatchId,
       homeTeamId: update.homeTeamId,
       awayTeamId: update.awayTeamId,
     };
+
+    if (typeof update.providerMatchId === 'string' && update.providerMatchId.length > 0) {
+      nextMatch.providerMatchId = update.providerMatchId;
+    } else if (typeof nextMatch.providerMatchId !== 'string') {
+      delete nextMatch.providerMatchId;
+    }
+
+    return nextMatch;
   });
 
   if (!hasAnyChange) {

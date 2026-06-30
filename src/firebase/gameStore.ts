@@ -30,6 +30,28 @@ const isObject = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null;
 };
 
+const sanitizeForFirebase = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      const sanitizedItem = sanitizeForFirebase(item);
+      return sanitizedItem === undefined ? null : sanitizedItem;
+    });
+  }
+
+  if (isObject(value)) {
+    const sanitizedObject: Record<string, unknown> = {};
+    for (const [key, nestedValue] of Object.entries(value)) {
+      const sanitizedNestedValue = sanitizeForFirebase(nestedValue);
+      if (sanitizedNestedValue !== undefined) {
+        sanitizedObject[key] = sanitizedNestedValue;
+      }
+    }
+    return sanitizedObject;
+  }
+
+  return value;
+};
+
 const isTournamentId = (value: unknown): value is TournamentId => {
   return value === 'WC26';
   // return value === 'WC26' || value === 'EURO28';
@@ -191,6 +213,8 @@ export const createCloudGame = async (ownerUid: string, state: PersistedAppState
   window.crypto.getRandomValues(array);
   const hostSecret = Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('');
 
+  const sanitizedState = sanitizeForFirebase(state) as PersistedAppState;
+
   // Write game payload
   await set(newGameRef, {
     meta: {
@@ -199,7 +223,7 @@ export const createCloudGame = async (ownerUid: string, state: PersistedAppState
       updatedAt: now,
       schemaVersion: 1,
     },
-    state,
+    state: sanitizedState,
   });
 
   // Write secret
@@ -247,8 +271,10 @@ export const updateCloudGameState = async (gameId: string, state: PersistedAppSt
     throw new Error('Firebase is not configured.');
   }
 
+  const sanitizedState = sanitizeForFirebase(state) as PersistedAppState;
+
   await update(ref(services.database, `games/${gameId}`), {
-    state,
+    state: sanitizedState,
     'meta/updatedAt': Date.now(),
   });
 };

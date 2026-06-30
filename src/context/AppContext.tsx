@@ -157,15 +157,22 @@ const mergeMatchesWithTemplate = (id: TournamentId, savedMatches?: Match[]): Mat
     const incomingMatch = savedMatches.find((match: Match) => match.id === templateMatch.id);
     if (!incomingMatch) return templateMatch;
 
-    return {
+    const nextProviderMatchId = templateMatch.stage === 'GROUP' ? templateMatch.providerMatchId : incomingMatch.providerMatchId;
+
+    const mergedMatch: Match = {
       ...templateMatch,
       homeScore: incomingMatch.homeScore,
       awayScore: incomingMatch.awayScore,
       status: resolveIncomingMatchStatus(incomingMatch),
-      providerMatchId: templateMatch.stage === 'GROUP' ? templateMatch.providerMatchId : incomingMatch.providerMatchId,
       homeTeamId: templateMatch.stage === 'GROUP' ? templateMatch.homeTeamId : incomingMatch.homeTeamId,
       awayTeamId: templateMatch.stage === 'GROUP' ? templateMatch.awayTeamId : incomingMatch.awayTeamId,
     };
+
+    if (typeof nextProviderMatchId === 'string' && nextProviderMatchId.length > 0) {
+      mergedMatch.providerMatchId = nextProviderMatchId;
+    }
+
+    return mergedMatch;
   });
 
   const activeTeams = getTeams(id);
